@@ -1,0 +1,14 @@
+# Sonus es una PWA estática: sin build, se publica la raíz del repo tal cual.
+[build]
+  publish = "."
+
+# Cabeceras correctas para el manifiesto y el service worker.
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Content-Type = "application/manifest+json"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"

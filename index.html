@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Sonus · Estudio de composición</title>
+  <meta name="description" content="Sonus — herramientas de composición musical: escalas, modos, acordes, préstamo modal, progresiones, piano roll y exportación MIDI." />
+  <meta name="theme-color" content="#0e1014" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 48 48" aria-hidden="true">
+        <circle cx="24" cy="24" r="22" fill="none" stroke="url(#g)" stroke-width="2"/>
+        <path d="M6 24 Q12 6 18 24 T30 24 T42 24" fill="none" stroke="url(#g)" stroke-width="3" stroke-linecap="round"/>
+        <defs><linearGradient id="g" x1="0" y1="0" x2="48" y2="48">
+          <stop offset="0" stop-color="#ffd36a"/><stop offset="1" stop-color="#5ad1a8"/>
+        </linearGradient></defs>
+      </svg>
+      <div class="brand-text">
+        <h1>Sonus</h1>
+        <span>estudio de composición</span>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="ctrl-group key-group">
+        <label>Tónica<select id="rootSel"></select></label>
+        <label>Modo / escala<select id="scaleSel"></select></label>
+      </div>
+
+      <button id="playBtn" class="play-btn" title="Reproducir / pausar (barra espaciadora)">▶</button>
+
+      <div class="ctrl-group">
+        <label>Tempo <b id="bpmVal">100</b><input id="bpm" type="range" min="40" max="220" value="100"/></label>
+      </div>
+      <div class="ctrl-group">
+        <label>Timbre<select id="instSel"></select></label>
+      </div>
+      <div class="ctrl-group sliders">
+        <label>Vol<input id="vol" type="range" min="0" max="1" step="0.01" value="0.8"/></label>
+        <label>Reverb<input id="rev" type="range" min="0" max="0.7" step="0.01" value="0.25"/></label>
+      </div>
+      <div class="ctrl-group extras">
+        <label>Estilo<select id="styleSel">
+          <option value="block">Bloque</option>
+          <option value="arp">Arpegio</option>
+          <option value="strum">Rasgueo</option>
+        </select></label>
+        <div class="toggle-col">
+          <button id="voiceLeadBtn" class="mini-toggle on" title="Conducción de voces suave">Voces</button>
+          <button id="metroBtn" class="mini-toggle" title="Metrónomo">Metro</button>
+        </div>
+        <label>Swing<input id="swing" type="range" min="0" max="0.6" step="0.01" value="0"/></label>
+      </div>
+      <button id="installBtn" class="btn ghost" hidden>Instalar app</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-view="explore">Explorar</button>
+    <button class="tab" data-view="chords">Acordes</button>
+    <button class="tab" data-view="compose">Componer</button>
+    <button class="tab" data-view="score">Partitura</button>
+    <button class="tab" data-view="project">Proyecto</button>
+  </nav>
+
+  <main>
+    <!-- EXPLORAR -->
+    <section id="view-explore" class="view active">
+      <div class="explore-grid">
+        <div class="card circle-card">
+          <h2>Círculo de quintas</h2>
+          <div id="circle" class="circle"></div>
+          <p class="hint">Click en una tonalidad para cambiar la escala. Las casillas vecinas son sus dominantes/subdominantes; la resaltada en otro anillo es su relativa.</p>
+        </div>
+        <div class="card info-card">
+          <h2>Escala activa</h2>
+          <div id="scaleInfo" class="scale-info"></div>
+        </div>
+      </div>
+      <div class="card piano-card">
+        <h2>Teclado</h2>
+        <div id="piano"></div>
+        <p class="hint">Toca con el ratón, el dedo o el teclado del ordenador (fila <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd>…). <kbd>Z</kbd>/<kbd>X</kbd> cambian de octava. Las teclas iluminadas pertenecen a la escala.</p>
+      </div>
+    </section>
+
+    <!-- ACORDES -->
+    <section id="view-chords" class="view">
+      <div class="card" id="chordsPanel"></div>
+    </section>
+
+    <!-- COMPONER -->
+    <section id="view-compose" class="view">
+      <div class="card compose-tools">
+        <button id="genBtn" class="btn accent">✨ Generar melodía</button>
+        <div class="midi-box">
+          <button id="midiConnect" class="btn ghost">Conectar MIDI</button>
+          <button id="midiRec" class="btn ghost" disabled>● Rec MIDI</button>
+          <span id="midiStatus" class="midi-status"></span>
+        </div>
+      </div>
+      <div class="card" id="sequencer"></div>
+    </section>
+
+    <!-- PARTITURA -->
+    <section id="view-score" class="view">
+      <div class="card score-card">
+        <div class="panel-head">
+          <h2>Partitura</h2>
+          <div class="score-actions">
+            <button class="btn" id="xmlBtn">🎼 Exportar MusicXML</button>
+            <button class="btn ghost" id="printBtn">🖨 Imprimir / PDF</button>
+          </div>
+        </div>
+        <div id="notation" class="notation"></div>
+        <p class="hint pad">Melodía en clave de sol con el cifrado de acordes sobre cada compás.
+          Exporta a <b>MusicXML</b> para editar en MuseScore/Finale/Sibelius, o imprime a <b>PDF</b>.</p>
+      </div>
+    </section>
+
+    <!-- PROYECTO -->
+    <section id="view-project" class="view">
+      <div class="card project-card">
+        <h2>Proyecto</h2>
+        <label class="field">Nombre<input id="projName" type="text" placeholder="Mi composición"/></label>
+        <div class="project-actions">
+          <button id="saveBtn" class="btn">💾 Guardar</button>
+          <button id="midiBtn" class="btn">🎹 Exportar MIDI</button>
+          <button id="wavBtn" class="btn">🔊 Exportar WAV</button>
+          <button id="jsonBtn" class="btn ghost">Exportar proyecto (.json)</button>
+          <button id="importBtn" class="btn ghost">Importar proyecto</button>
+          <input id="importFile" type="file" accept=".json,application/json" hidden />
+          <button id="newBtn" class="btn ghost danger">Nuevo</button>
+        </div>
+        <p class="hint">El proyecto se guarda solo en este navegador. Exporta a <b>MIDI</b> para abrirlo en cualquier DAW (Logic, Ableton, FL Studio, MuseScore…) o a <b>.json</b> para respaldarlo.</p>
+      </div>
+
+      <div class="card help-card">
+        <h2>Cómo componer como un maestro con Sonus</h2>
+        <ol class="help-list">
+          <li><b>Elige una tonalidad y un modo</b> en el círculo de quintas. Cada modo tiene su carácter: el lidio sueña, el frigio oscurece.</li>
+          <li><b>Construye la progresión</b> en la pestaña Acordes. Empieza por una plantilla y luego enriquécela con <b>préstamos modales</b> (bVI, bVII, iv…) — el recurso que distingue a los grandes.</li>
+          <li><b>Sigue las sugerencias</b>: Sonus propone el siguiente acorde según la función armónica de lo que llevas.</li>
+          <li><b>Dibuja la melodía</b> en el piano roll. Las filas iluminadas están en escala; pisa las notas del acorde en los tiempos fuertes.</li>
+          <li><b>Reproduce, ajusta y exporta</b> a MIDI para seguir en tu DAW favorito.</li>
+        </ol>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">Sonus · PWA de composición musical · funciona sin conexión</footer>
+</body>
+</html>
