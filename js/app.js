@@ -52,6 +52,7 @@ class App {
     this._bindPlayback();
     this._bindCompose();
     this._bindMidi();
+    this._bindMenu();
     this._syncControls();
     this.recompute();
     this.refreshAll();
@@ -584,6 +585,16 @@ class App {
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
     }
+  }
+
+  _bindMenu() {
+    const toggle = document.getElementById('menuToggle');
+    const header = document.querySelector('.topbar');
+    if (!toggle || !header) return;
+    toggle.addEventListener('click', () => {
+      const collapsed = header.classList.toggle('collapsed');
+      toggle.setAttribute('aria-expanded', String(!collapsed));
+    });
   }
 
   _bindInstall() {

@@ -3,7 +3,7 @@
  * Precarga el app-shell para uso 100% offline; cache-first con actualización.
  * ==========================================================================*/
 
-const CACHE = 'sonus-v4';
+const CACHE = 'sonus-v5';
 const ASSETS = [
   './',
   './index.html',

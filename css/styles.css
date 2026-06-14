@@ -47,18 +47,28 @@ kbd {
 /* ----------------------------------------------------------------- topbar */
 .topbar {
   position: sticky; top: 0; z-index: 50;
-  display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
-  padding: 12px 20px;
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 10px 20px;
   background: linear-gradient(180deg, rgba(20, 23, 29, 0.96), rgba(20, 23, 29, 0.82));
   backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border);
 }
+.topbar-main { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.topbar-actions { display: flex; align-items: center; gap: 12px; }
+.menu-toggle {
+  display: none; align-items: center; gap: 7px;
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+  border-radius: 10px; padding: 10px 14px; cursor: pointer; font-family: var(--font); font-size: 0.9rem;
+}
+.menu-toggle:hover { border-color: var(--border-strong); }
+.menu-toggle .chev { font-size: 0.7rem; transition: transform 0.2s ease; }
+.topbar:not(.collapsed) .menu-toggle .chev { transform: rotate(180deg); }
 .brand { display: flex; align-items: center; gap: 12px; }
 .brand-mark { width: 40px; height: 40px; }
 .brand-text h1 { font-size: 1.35rem; background: linear-gradient(90deg, var(--gold), var(--teal)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 .brand-text span { font-size: 0.7rem; color: var(--muted); letter-spacing: 0.12em; text-transform: uppercase; }
 
-.controls { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; flex: 1; justify-content: flex-end; }
+.controls { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .ctrl-group { display: flex; gap: 14px; align-items: center; }
 .ctrl-group label, .controls > div label {
   display: flex; flex-direction: column; gap: 4px;
@@ -346,12 +356,17 @@ main { padding: 16px 20px; max-width: 1180px; margin: 0 auto; }
 /* ------------------------------------------------------------- responsive */
 @media (max-width: 860px) {
   .explore-grid { grid-template-columns: 1fr; }
-  .controls { justify-content: flex-start; }
   .brand-text span { display: none; }
 }
+/* En móvil/tablet el menú de controles es plegable. */
+@media (max-width: 760px) {
+  .menu-toggle { display: inline-flex; }
+  .topbar.collapsed .controls { display: none; }
+  .controls { padding-top: 4px; border-top: 1px solid var(--border); }
+}
 @media (max-width: 560px) {
-  .topbar { gap: 12px; padding: 10px 14px; }
+  .topbar { padding: 10px 14px; }
   main { padding: 12px; }
-  .sliders { display: none; }
   .piano { height: 130px; }
+  .menu-toggle { padding: 9px 12px; }
 }
