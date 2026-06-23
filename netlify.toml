@@ -2,6 +2,16 @@
 [build]
   publish = "."
 
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# La API de la nube (sesiones de composición).
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
 # Cabeceras correctas para el manifiesto y el service worker.
 [[headers]]
   for = "/manifest.webmanifest"

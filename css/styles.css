@@ -317,6 +317,19 @@ main { padding: 16px 20px; max-width: 1180px; margin: 0 auto; }
 .field { display: flex; flex-direction: column; gap: 6px; max-width: 360px; margin-bottom: 16px; font-size: 0.8rem; color: var(--muted); }
 .field input { font-size: 1rem; }
 .project-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.cloud-info { margin: 12px 0 6px; }
+.cloud-info code { background: var(--panel-2); padding: 1px 6px; border-radius: 5px; }
+.cloud-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.cloud-item {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 11px 14px; cursor: pointer; font-family: var(--font); color: var(--text); text-align: left;
+  transition: all 0.15s ease;
+}
+.cloud-item:hover { border-color: var(--teal); background: rgba(90, 209, 168, 0.06); }
+.cloud-item b { font-size: 0.95rem; }
+.cloud-item span { font-size: 0.74rem; color: var(--muted); }
+
 .help-list { list-style: none; counter-reset: step; display: grid; gap: 12px; }
 .help-list li { position: relative; padding-left: 40px; line-height: 1.5; color: var(--text); }
 .help-list li::before { counter-increment: step; content: counter(step); position: absolute; left: 0; top: 0; width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(145deg, var(--gold), var(--teal)); color: #10131a; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; }

@@ -17,6 +17,7 @@ import { buildSongLayout, chordEvents } from './song.js';
 import { generateMelody } from './generator.js';
 import { reharmonize } from './reharmonize.js';
 import { renderWavFromEvents } from './recorder.js';
+import * as Cloud from './cloud.js';
 import { buildMusicXML } from './musicxml.js';
 import { triggerDownload } from './midi.js';
 import * as Store from './storage.js';
@@ -60,9 +61,15 @@ class App {
     this._syncControls();
     this.recompute();
     this.refreshAll();
+    this._bindCloud();
     this._registerSW();
     this._bindInstall();
     window.addEventListener('resize', () => { if (this._scoreVisible()) this.notation.render(); });
+
+    // Si llega un enlace compartido (?id=…), abre esa sesión de la nube.
+    const sharedId = new URLSearchParams(location.search).get('id');
+    if (sharedId) this.openSession(sharedId);
+    else this._renderCloudInfo();
   }
 
   _scoreVisible() {
@@ -780,6 +787,101 @@ class App {
       toggle.setAttribute('aria-expanded', String(!collapsed));
     });
   }
+
+  /* ------------------------------------------------------------- nube */
+  _tokens() { try { return JSON.parse(localStorage.getItem('sonus.tokens') || '{}'); } catch { return {}; } }
+  _getToken(id) { return this._tokens()[id]; }
+  _saveToken(id, token) { const t = this._tokens(); t[id] = token; localStorage.setItem('sonus.tokens', JSON.stringify(t)); }
+  _setUrlId(id) { try { history.replaceState(null, '', location.pathname + '?id=' + id); } catch {} }
+
+  _bindCloud() {
+    const save = document.getElementById('cloudSaveBtn');
+    const share = document.getElementById('cloudShareBtn');
+    const open = document.getElementById('cloudOpenBtn');
+    if (save) save.addEventListener('click', () => this.saveToCloud());
+    if (share) share.addEventListener('click', () => this.shareLink());
+    if (open) open.addEventListener('click', () => this.openGallery());
+  }
+
+  async saveToCloud() {
+    this._toast('Guardando en la nube…');
+    try {
+      const project = this.serialize();
+      const id = this.state.cloudId;
+      const token = id ? this._getToken(id) : null;
+      if (id && token) {
+        await Cloud.updateSession(id, token, project);
+        this._toast('Actualizado en la nube ☁');
+      } else {
+        const res = await Cloud.createSession(project);
+        this.state.cloudId = res.id;
+        this._saveToken(res.id, res.editToken);
+        this._setUrlId(res.id);
+        this.touch();
+        this._toast('Publicado ☁ — enlace listo para compartir');
+      }
+      this._renderCloudInfo();
+    } catch (e) { this._toast('Error nube: ' + e.message); }
+  }
+
+  async openSession(id) {
+    this._toast('Abriendo sesión…');
+    try {
+      const project = await Cloud.getSession(id);
+      this.state = { ...Store.defaultProject(), ...project };
+      this.state.cloudId = id;
+      this.stopPlayback();
+      this.transport.bpm = this.state.bpm;
+      this.transport.swing = this.state.swing || 0;
+      this.engine.setInstrument(this.state.instrument);
+      this.engine.setVolume(this.state.volume);
+      this.engine.setReverb(this.state.reverb);
+      this._ensureSections();
+      this.recompute();
+      this._syncControls();
+      this.refreshAll();
+      this._setUrlId(id);
+      this._renderCloudInfo();
+      Store.saveProject(this.serialize());
+      this._toast('Sesión abierta ☁');
+    } catch (e) { this._toast('No se pudo abrir: ' + e.message); }
+  }
+
+  async openGallery() {
+    const box = document.getElementById('cloudList');
+    if (!box) return;
+    box.innerHTML = '<div class="hint">Cargando sesiones…</div>';
+    try {
+      const sessions = await Cloud.listSessions();
+      if (!sessions.length) { box.innerHTML = '<div class="hint">Aún no hay sesiones publicadas. ¡Publica la tuya!</div>'; return; }
+      box.innerHTML = '';
+      sessions.forEach((s) => {
+        const el = document.createElement('button');
+        el.className = 'cloud-item';
+        const when = s.updated ? new Date(s.updated).toLocaleString() : '';
+        el.innerHTML = `<b>${this._esc(s.title)}</b><span>${when}</span>`;
+        el.addEventListener('click', () => this.openSession(s.id));
+        box.appendChild(el);
+      });
+    } catch (e) { box.innerHTML = '<div class="hint">Error al cargar: ' + this._esc(e.message) + '</div>'; }
+  }
+
+  shareLink() {
+    if (!this.state.cloudId) { this._toast('Primero guarda en la nube ☁'); return; }
+    const url = location.origin + location.pathname + '?id=' + this.state.cloudId;
+    if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => this._toast('Enlace copiado 🔗'), () => prompt('Copia el enlace:', url));
+    else prompt('Copia el enlace:', url);
+  }
+
+  _renderCloudInfo() {
+    const el = document.getElementById('cloudInfo');
+    if (!el) return;
+    if (!this.state.cloudId) { el.textContent = 'Esta composición aún no está en la nube.'; return; }
+    const owner = !!this._getToken(this.state.cloudId);
+    el.innerHTML = `En la nube · id <code>${this._esc(this.state.cloudId)}</code> · ${owner ? 'puedes sobrescribirla' : 'copia de solo lectura (al guardar se crea una nueva)'}`;
+  }
+
+  _esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
   _bindInstall() {
     const btn = document.getElementById('installBtn');

@@ -3,7 +3,7 @@
  * Precarga el app-shell para uso 100% offline; cache-first con actualización.
  * ==========================================================================*/
 
-const CACHE = 'sonus-v6';
+const CACHE = 'sonus-v7';
 const ASSETS = [
   './',
   './index.html',
@@ -14,6 +14,7 @@ const ASSETS = [
   './js/audio.js',
   './js/midi.js',
   './js/storage.js',
+  './js/cloud.js',
   './js/song.js',
   './js/generator.js',
   './js/reharmonize.js',
@@ -49,6 +50,12 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+
+  // La API de la nube va siempre a la red (datos dinámicos, nunca cacheada).
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/.netlify/')) {
+    event.respondWith(fetch(req));
+    return;
+  }
 
   // Navegación: red primero, índice cacheado como respaldo (offline).
   if (req.mode === 'navigate') {

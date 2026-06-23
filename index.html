@@ -151,6 +151,20 @@
         <p class="hint">El proyecto se guarda solo en este navegador. Exporta a <b>MIDI</b> para abrirlo en cualquier DAW (Logic, Ableton, FL Studio, MuseScore…) o a <b>.json</b> para respaldarlo.</p>
       </div>
 
+      <div class="card cloud-card">
+        <h2>☁ Nube</h2>
+        <p class="hint">Guarda tu composición en la nube y compártela por enlace. Cualquiera con el enlace
+          puede abrirla y verla; solo tú (desde este navegador) puedes sobrescribirla. Otras personas pueden
+          guardar su propia copia.</p>
+        <div class="project-actions">
+          <button id="cloudSaveBtn" class="btn accent">☁ Guardar en la nube</button>
+          <button id="cloudShareBtn" class="btn">🔗 Compartir enlace</button>
+          <button id="cloudOpenBtn" class="btn ghost">📂 Abrir de la nube</button>
+        </div>
+        <div id="cloudInfo" class="cloud-info hint"></div>
+        <div id="cloudList" class="cloud-list"></div>
+      </div>
+
       <div class="card help-card">
         <h2>Cómo componer como un maestro con Sonus</h2>
         <ol class="help-list">
