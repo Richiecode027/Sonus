@@ -6,7 +6,7 @@
 const KEY = 'sonus.project.v1';
 
 export const defaultProject = () => ({
-  version: 1,
+  version: 2,
   name: 'Proyecto sin título',
   root: 'C',
   scale: 'ionian',
@@ -14,8 +14,16 @@ export const defaultProject = () => ({
   instrument: 'grand',
   reverb: 0.25,
   volume: 0.8,
-  progression: [],          // [{ degree, seventh, source, symbol, roman, midis, name }]
-  sequence: {},             // { "midi:col": true } notas del piano roll
+  // Estructura de la canción: cada sección tiene su progresión y su melodía.
+  sections: [
+    { id: 's_intro', name: 'Intro', progression: [], sequence: {} },
+    { id: 's_verso1', name: 'Verso 1', progression: [], sequence: {} },
+    { id: 's_coro', name: 'Coro', progression: [], sequence: {} },
+  ],
+  activeSection: 0,
+  // Buffers de la sección activa (se rehidratan al cargar; no se serializan).
+  progression: [],
+  sequence: {},
   seqSteps: 16,
   octaveRange: [4, 5],
   voiceLeading: true,       // conducción de voces suave

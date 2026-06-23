@@ -8,20 +8,25 @@ import { buildMasterChain, spawnVoice, INSTRUMENTS } from './audio.js';
 import { buildSongEvents } from './song.js';
 import { triggerDownload } from './midi.js';
 
-export async function renderSongWav(opts) {
-  const { events, duration } = buildSongEvents(opts);
-  if (!events.length) return false;
+/** Renderiza una lista de eventos {midi, when, dur, vel} a un WAV descargable. */
+export async function renderWavFromEvents(events, { duration, instrumentKey, reverbWet = 0.25, volume = 0.8, filename = 'sonus' } = {}) {
+  if (!events || !events.length) return false;
   const rate = 44100;
   const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
   if (!Offline) throw new Error('OfflineAudioContext no disponible');
   const ctx = new Offline(2, Math.ceil(duration * rate), rate);
-  const { master } = buildMasterChain(ctx, { volume: opts.volume ?? 0.8, reverbWet: opts.reverbWet ?? 0.25 });
-  const inst = INSTRUMENTS[opts.instrumentKey] || INSTRUMENTS.grand;
+  const { master } = buildMasterChain(ctx, { volume, reverbWet });
+  const inst = INSTRUMENTS[instrumentKey] || INSTRUMENTS.grand;
   for (const e of events) spawnVoice(ctx, master, inst, e.midi, e.when, e.dur, e.vel);
   const buffer = await ctx.startRendering();
-  const wav = encodeWav(buffer);
-  triggerDownload(new Blob([wav], { type: 'audio/wav' }), (opts.filename || 'sonus') + '.wav');
+  triggerDownload(new Blob([encodeWav(buffer)], { type: 'audio/wav' }), (filename || 'sonus') + '.wav');
   return true;
+}
+
+/** Render a partir de la estructura de canción (compatibilidad). */
+export async function renderSongWav(opts) {
+  const { events, duration } = buildSongEvents(opts);
+  return renderWavFromEvents(events, { duration, ...opts });
 }
 
 function encodeWav(buffer) {

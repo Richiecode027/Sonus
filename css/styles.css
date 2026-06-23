@@ -123,6 +123,34 @@ input[type="range"]::-moz-range-thumb { width: 15px; height: 15px; border: none;
 .tab:hover { color: var(--text); }
 .tab.active { color: var(--text); background: var(--panel); border-bottom-color: var(--gold); }
 
+/* --------------------------------------------------------- barra de secciones */
+.sections-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 10px 20px; max-width: 1180px; margin: 0 auto;
+}
+.sec-label { font-size: 0.66rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-right: 4px; }
+.sec-chip {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: 20px; padding: 5px 6px 5px 14px;
+  transition: all 0.15s ease;
+}
+.sec-chip.active { border-color: var(--gold); background: rgba(255, 211, 106, 0.08); }
+.sec-chip.playing { box-shadow: 0 0 0 2px var(--teal); }
+.sec-name { background: none; border: none; color: var(--text); font-family: var(--font); font-size: 0.9rem; cursor: pointer; padding: 0; font-weight: 600; }
+.sec-chip.active .sec-name { color: var(--gold); }
+.sec-count { font-size: 0.62rem; color: var(--muted); }
+.sec-ctrl { display: flex; gap: 2px; }
+.sec-ctrl button {
+  width: 22px; height: 22px; line-height: 1; padding: 0; border-radius: 50%;
+  background: transparent; border: 1px solid var(--border); color: var(--muted); cursor: pointer; font-size: 0.7rem;
+}
+.sec-ctrl button:hover { color: var(--text); border-color: var(--border-strong); }
+.sec-add {
+  background: transparent; border: 1px dashed var(--border); border-radius: 20px; color: var(--muted);
+  padding: 6px 14px; cursor: pointer; font-family: var(--font); font-size: 0.82rem;
+}
+.sec-add:hover { border-color: var(--teal); color: var(--teal); }
+
 /* ------------------------------------------------------------------- main */
 main { padding: 16px 20px; max-width: 1180px; margin: 0 auto; }
 .view { display: none; animation: fade 0.25s ease; }

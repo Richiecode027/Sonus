@@ -3,7 +3,7 @@
  * Precarga el app-shell para uso 100% offline; cache-first con actualización.
  * ==========================================================================*/
 
-const CACHE = 'sonus-v5';
+const CACHE = 'sonus-v6';
 const ASSETS = [
   './',
   './index.html',
@@ -25,6 +25,7 @@ const ASSETS = [
   './js/ui/sequencer.js',
   './js/ui/notation.js',
   './js/ui/midiInput.js',
+  './js/ui/sections.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',

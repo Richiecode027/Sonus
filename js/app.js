@@ -11,11 +11,12 @@ import { ChordsPanel } from './ui/chords.js';
 import { Sequencer } from './ui/sequencer.js';
 import { Notation } from './ui/notation.js';
 import { MidiInput } from './ui/midiInput.js';
+import { SectionsBar } from './ui/sections.js';
 import { downloadMidi } from './midi.js';
 import { buildSongLayout, chordEvents } from './song.js';
 import { generateMelody } from './generator.js';
 import { reharmonize } from './reharmonize.js';
-import { renderSongWav } from './recorder.js';
+import { renderWavFromEvents } from './recorder.js';
 import { buildMusicXML } from './musicxml.js';
 import { triggerDownload } from './midi.js';
 import * as Store from './storage.js';
@@ -42,6 +43,9 @@ class App {
     this.sequencer = new Sequencer(document.getElementById('sequencer'), this);
     this.notation = new Notation(document.getElementById('notation'), this);
     this.midi = new MidiInput(this);
+    this.sections = new SectionsBar(document.getElementById('sectionsBar'), this);
+
+    this._ensureSections();
 
     this.transport.bpm = this.state.bpm;
     this.transport.swing = this.state.swing;
@@ -64,6 +68,189 @@ class App {
   _scoreVisible() {
     const v = document.getElementById('view-score');
     return v && v.classList.contains('active');
+  }
+
+  /* ----------------------------------------------------- secciones (estructura) */
+  _uid() { return 's' + Math.random().toString(36).slice(2, 8); }
+  currentSection() { return this.state.sections[this.state.activeSection] || this.state.sections[0]; }
+
+  _wireActiveSection() {
+    const s = this.currentSection();
+    this.state.progression = s.progression;   // referencias vivas a la sección activa
+    this.state.sequence = s.sequence;
+  }
+  _setProgression(arr) { this.currentSection().progression = arr; this.state.progression = arr; }
+  _setSequence(obj) { this.currentSection().sequence = obj; this.state.sequence = obj; }
+
+  _ensureSections() {
+    const st = this.state;
+    if (!Array.isArray(st.sections) || !st.sections.length) {
+      const prog = Array.isArray(st.progression) ? st.progression : [];
+      const seq = (st.sequence && typeof st.sequence === 'object') ? st.sequence : {};
+      st.sections = (prog.length || Object.keys(seq).length)
+        ? [{ id: this._uid(), name: 'Sección 1', progression: prog, sequence: seq }]
+        : [
+            { id: this._uid(), name: 'Intro', progression: [], sequence: {} },
+            { id: this._uid(), name: 'Verso 1', progression: [], sequence: {} },
+            { id: this._uid(), name: 'Coro', progression: [], sequence: {} },
+          ];
+      st.activeSection = 0;
+    }
+    st.sections.forEach((s) => {
+      if (!Array.isArray(s.progression)) s.progression = [];
+      if (!s.sequence || typeof s.sequence !== 'object') s.sequence = {};
+      if (!s.id) s.id = this._uid();
+      if (!s.name) s.name = 'Sección';
+    });
+    if (st.activeSection == null || st.activeSection < 0 || st.activeSection >= st.sections.length) st.activeSection = 0;
+    this._wireActiveSection();
+  }
+
+  setActiveSection(i) {
+    if (i < 0 || i >= this.state.sections.length || i === this.state.activeSection) return;
+    this.stopPlayback();
+    this.state.activeSection = i;
+    this._wireActiveSection();
+    this.sections.render();
+    this.chords.update();
+    this.sequencer.render();
+    if (this._scoreVisible()) this.notation.render();
+    this.touch();
+  }
+
+  addSection() {
+    this.state.sections.push({ id: this._uid(), name: 'Sección ' + (this.state.sections.length + 1), progression: [], sequence: {} });
+    this.state.activeSection = this.state.sections.length - 1;
+    this._wireActiveSection();
+    this.sections.render(); this.chords.update(); this.sequencer.render();
+    if (this._scoreVisible()) this.notation.render();
+    this.touch();
+  }
+
+  renameSection(i) {
+    const s = this.state.sections[i]; if (!s) return;
+    const name = prompt('Nombre de la sección:', s.name);
+    if (name != null && name.trim()) { s.name = name.trim(); this.sections.render(); this.touch(); }
+  }
+
+  deleteSection(i) {
+    const secs = this.state.sections;
+    if (secs.length <= 1) { this._toast('Debe quedar al menos una sección'); return; }
+    const s = secs[i];
+    if ((s.progression.length || Object.keys(s.sequence).length) && !confirm(`¿Eliminar la sección «${s.name}»?`)) return;
+    secs.splice(i, 1);
+    if (this.state.activeSection >= secs.length) this.state.activeSection = secs.length - 1;
+    else if (this.state.activeSection > i) this.state.activeSection--;
+    this.stopPlayback();
+    this._wireActiveSection();
+    this.sections.render(); this.chords.update(); this.sequencer.render();
+    if (this._scoreVisible()) this.notation.render();
+    this.touch();
+  }
+
+  moveSection(i, dir) {
+    const secs = this.state.sections;
+    const j = i + dir;
+    if (j < 0 || j >= secs.length) return;
+    [secs[i], secs[j]] = [secs[j], secs[i]];
+    if (this.state.activeSection === i) this.state.activeSection = j;
+    else if (this.state.activeSection === j) this.state.activeSection = i;
+    this._wireActiveSection();
+    this.sections.render(); this.touch();
+  }
+
+  /* Estado serializable (sin los buffers de la sección activa). */
+  serialize() {
+    const { progression, sequence, ...rest } = this.state;
+    return rest;
+  }
+
+  /* ------------------------------------------------ arreglo (canción completa) */
+  _voiceSection(sec) {
+    if (!sec.progression.length) return [];
+    const vl = this.state.voiceLeading
+      ? T.voiceLeadProgression(sec.progression, { register: 4 })
+      : sec.progression.map((c) => c.midis);
+    return vl.map((m, i) => m.map((x) => x + 12 * (sec.progression[i].octaveShift || 0)));
+  }
+
+  buildArrangement() {
+    const barSteps = this.transport.stepsPerBeat * 4;
+    const seqSteps = this.state.seqSteps;
+    const barChords = {};
+    const melodyByStep = {};
+    const marks = [];
+    let globalBar = 0;
+    for (const sec of this.state.sections) {
+      const voiced = this._voiceSection(sec);
+      const hasMelody = Object.keys(sec.sequence).length > 0;
+      if (!voiced.length && !hasMelody) continue;      // omite secciones vacías
+      const sbars = Math.max(voiced.length, Math.ceil(seqSteps / barSteps), 1);
+      marks.push({ name: sec.name, startBar: globalBar });
+      for (let b = 0; b < sbars; b++) if (voiced.length) barChords[globalBar + b] = voiced[b % voiced.length];
+      if (hasMelody) {
+        const secMel = {};
+        for (const k in sec.sequence) { const [m, c] = k.split(':').map(Number); (secMel[c] = secMel[c] || []).push(m); }
+        const startStep = globalBar * barSteps;
+        const secSteps = sbars * barSteps;
+        for (let ls = 0; ls < secSteps; ls++) { const col = ls % seqSteps; if (secMel[col]) melodyByStep[startStep + ls] = secMel[col]; }
+      }
+      globalBar += sbars;
+    }
+    return { barChords, melodyByStep, totalSteps: globalBar * barSteps, barSteps, marks };
+  }
+
+  _sectionOfBar(bar, marks) {
+    let idx = 0;
+    for (let i = 0; i < marks.length; i++) { if (bar >= marks[i].startBar) idx = i; else break; }
+    return idx;
+  }
+
+  buildArrangementEvents(loops = 1) {
+    const arr = this.buildArrangement();
+    const stepDur = 60 / this.state.bpm / this.transport.stepsPerBeat;
+    const barDur = arr.barSteps * stepDur;
+    const events = [];
+    const N = loops * arr.totalSteps;
+    for (let s = 0; s < N; s++) {
+      const within = s % arr.totalSteps;
+      const t = s * stepDur;
+      if (within % arr.barSteps === 0) {
+        const ch = arr.barChords[within / arr.barSteps];
+        if (ch) chordEvents(ch, t, barDur, stepDur, this.state.chordStyle, 0.5).forEach((e) => events.push(e));
+      }
+      const notes = arr.melodyByStep[within];
+      if (notes) notes.forEach((m) => events.push({ midi: m, when: t, dur: stepDur * 1.7, vel: 0.9 }));
+    }
+    return { events, duration: N * stepDur + 2.8 };
+  }
+
+  /** Reproduce la canción entera (todas las secciones encadenadas). */
+  playArrangement() {
+    this.stopPlayback();
+    const arr = this.buildArrangement();
+    if (!arr.totalSteps) { this._toast('Añade acordes o melodía a alguna sección'); return; }
+    const style = this.state.chordStyle;
+    this.engine.init().then(() => {
+      this.transport.totalSteps = arr.totalSteps;
+      this.transport.loop = true;
+      const barDur = arr.barSteps * this.transport.stepDur;
+      this.transport.onStep = (step, time) => {
+        this._metroAt(step, time);
+        if (step % arr.barSteps === 0) {
+          const ch = arr.barChords[step / arr.barSteps];
+          if (ch) chordEvents(ch, time, barDur, this.transport.stepDur, style, 0.5).forEach((e) => this.engine.playNote(e.midi, e.dur, e.when, e.vel));
+        }
+        const notes = arr.melodyByStep[step];
+        if (notes) notes.forEach((m) => this.engine.playNote(m, this.transport.stepDur * 1.7, time, 0.9));
+      };
+      this.transport.onTick = (step) => {
+        if (step < 0) { this.sections.setPlaying(-1); return; }
+        this.sections.setPlaying(this._sectionOfBar(Math.floor(step / arr.barSteps), arr.marks));
+      };
+      this.transport.start();
+      this._setPlayUI(true);
+    });
   }
 
   /* --------------------------------------------------------- derived data */
@@ -139,23 +326,27 @@ class App {
   addToProgression(chord) {
     this.state.progression.push(this.attachMidis(chord));
     this.chords.renderProgression();
+    this.sections.render();
     this.touch();
   }
   removeFromProgression(i) {
     this.state.progression.splice(i, 1);
     this.chords.renderProgression();
+    this.sections.render();
     this.touch();
   }
   clearProgression() {
     this.stopPlayback();
-    this.state.progression = [];
+    this._setProgression([]);
     this.chords.renderProgression();
+    this.sections.render();
     this.touch();
   }
   loadProgressionPreset(preset) {
     const dia = this.getDiatonic(preset.seventh ? 4 : 3);
-    this.state.progression = preset.degrees.map((d) => this.attachMidis(dia[d % dia.length]));
+    this._setProgression(preset.degrees.map((d) => this.attachMidis(dia[d % dia.length])));
     this.chords.renderProgression();
+    this.sections.render();
     this.touch();
   }
 
@@ -180,8 +371,9 @@ class App {
 
   applyReharmonization(chords) {
     this.stopPlayback();
-    this.state.progression = chords.map((c) => this.attachMidis(c));
+    this._setProgression(chords.map((c) => this.attachMidis(c)));
     this.chords.renderProgression();
+    this.sections.render();
     if (this._scoreVisible()) this.notation.render();
     this.touch();
     this._toast('Progresión rearmonizada ✨');
@@ -203,7 +395,7 @@ class App {
     this.sequencer.render();
     this.touch();
   }
-  clearSequence() { this.state.sequence = {}; this.sequencer.render(); this.touch(); }
+  clearSequence() { this._setSequence({}); this.sequencer.render(); this.touch(); }
 
   _applySeqRange() {
     const [lo, hi] = this.state.octaveRange;
@@ -261,7 +453,7 @@ class App {
     });
   }
 
-  playSong() {
+  playSection() {
     this.stopPlayback();
     const seqSteps = this.state.seqSteps;
     const melody = this._melodyByCol();
@@ -302,7 +494,7 @@ class App {
       chords, steps: seqSteps, scalePcs: this.scalePcSet,
       low: 12 * (lo + 1), high: 12 * (hi + 1) + 11, stepsPerBeat: this.transport.stepsPerBeat,
     });
-    this.state.sequence = seq;
+    this._setSequence(seq);
     this.sequencer.render();
     if (this._scoreVisible()) this.notation.render();
     this.touch();
@@ -317,15 +509,12 @@ class App {
 
   /* ------------------------------------------------------------- exportar */
   async exportWav() {
-    const voiced = this.getVoicedProgression();
-    const melody = this._melodyByCol();
-    if (!voiced.length && !Object.keys(melody).length) { this._toast('Nada que exportar todavía'); return; }
+    const { events, duration } = this.buildArrangementEvents(1);
+    if (!events.length) { this._toast('Nada que exportar todavía'); return; }
     this._toast('Renderizando WAV…');
     try {
-      await renderSongWav({
-        voiced, melodyByCol: melody, seqSteps: this.state.seqSteps, stepsPerBeat: this.transport.stepsPerBeat,
-        bpm: this.state.bpm, style: this.state.chordStyle, loops: 2,
-        instrumentKey: this.state.instrument, reverbWet: this.state.reverb, volume: this.state.volume,
+      await renderWavFromEvents(events, {
+        duration, instrumentKey: this.state.instrument, reverbWet: this.state.reverb, volume: this.state.volume,
         filename: (this.state.name || 'sonus').replace(/[^\w\-]+/g, '_'),
       });
       this._toast('WAV exportado 🔊');
@@ -372,6 +561,7 @@ class App {
   /* ------------------------------------------------------------- refresh */
   refreshAll() {
     this._applySeqRange();
+    this.sections.render();
     this.circle.setActive(this.state.root, this.family, this.state.root);
     this.piano.setScale(this.scalePcSet, this.rootPc);
     this.chords.update();
@@ -443,7 +633,7 @@ class App {
     document.getElementById('rootSel').addEventListener('change', (e) => this.setKey(null, null, e.target.value));
     document.getElementById('scaleSel').addEventListener('change', (e) => this.setKey(null, e.target.value, this.state.root));
     document.getElementById('playBtn').addEventListener('click', () => {
-      if (this.transport.playing) this.stopPlayback(); else this.playSong();
+      if (this.transport.playing) this.stopPlayback(); else this.playArrangement();
     });
     document.getElementById('bpm').addEventListener('input', (e) => {
       this.state.bpm = +e.target.value; this.transport.bpm = +e.target.value;
@@ -456,7 +646,7 @@ class App {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Space' && !/input|textarea|select/i.test(e.target.tagName)) {
         e.preventDefault();
-        if (this.transport.playing) this.stopPlayback(); else this.playSong();
+        if (this.transport.playing) this.stopPlayback(); else this.playArrangement();
       }
     });
   }
@@ -514,20 +704,21 @@ class App {
       this.midi.setRecording(on);
       rec.classList.toggle('on', on);
       rec.textContent = on ? '● Grabando' : '● Rec MIDI';
-      if (on && !this.transport.playing) this.playSong();
+      if (on && !this.transport.playing) this.playSection();
     });
   }
 
   _bindProject() {
     document.getElementById('projName').addEventListener('input', (e) => { this.state.name = e.target.value; this.touch(); });
-    document.getElementById('saveBtn').addEventListener('click', () => { Store.saveProject(this.state); this._toast('Proyecto guardado'); });
+    document.getElementById('saveBtn').addEventListener('click', () => { Store.saveProject(this.serialize()); this._toast('Proyecto guardado'); });
     document.getElementById('midiBtn').addEventListener('click', () => this.exportMidi());
-    document.getElementById('jsonBtn').addEventListener('click', () => Store.exportJSON(this.state));
+    document.getElementById('jsonBtn').addEventListener('click', () => Store.exportJSON(this.serialize()));
     document.getElementById('newBtn').addEventListener('click', () => {
       if (!confirm('¿Empezar un proyecto nuevo? Se perderán los cambios sin guardar.')) return;
       this.state = Store.defaultProject();
       this.stopPlayback();
       this.transport.bpm = this.state.bpm;
+      this._ensureSections();
       this.recompute(); this._syncControls(); this.refreshAll(); this.touch();
     });
     const importFile = document.getElementById('importFile');
@@ -538,6 +729,7 @@ class App {
         this.state = await Store.importJSON(file);
         this.stopPlayback(); this.transport.bpm = this.state.bpm;
         this.engine.setInstrument(this.state.instrument);
+        this._ensureSections();
         this.recompute(); this._syncControls(); this.refreshAll(); this.touch();
         this._toast('Proyecto importado');
       } catch { this._toast('Archivo inválido'); }
@@ -546,22 +738,14 @@ class App {
   }
 
   exportMidi() {
-    const prog = this.state.progression;
+    const arr = this.buildArrangement();
+    const beatPerStep = 1 / this.transport.stepsPerBeat;
+    const chordNotes = [], melNotes = [];
+    for (const bar in arr.barChords) arr.barChords[bar].forEach((m) => chordNotes.push({ midi: m, start: +bar * 4, duration: 3.9, velocity: 0.7 }));
+    for (const step in arr.melodyByStep) arr.melodyByStep[step].forEach((m) => melNotes.push({ midi: m, start: +step * beatPerStep, duration: beatPerStep * 1.6, velocity: 0.9 }));
     const tracks = [];
-    if (prog.length) {
-      const notes = [];
-      prog.forEach((c, i) => c.midis.forEach((m) => notes.push({ midi: m, start: i * 4, duration: 3.9, velocity: 0.7 })));
-      tracks.push({ name: 'Acordes', channel: 0, notes });
-    }
-    if (Object.keys(this.state.sequence).length) {
-      const beatPerStep = 1 / this.transport.stepsPerBeat;
-      const notes = [];
-      for (const key in this.state.sequence) {
-        const [m, c] = key.split(':').map(Number);
-        notes.push({ midi: m, start: c * beatPerStep, duration: beatPerStep * 1.6, velocity: 0.9 });
-      }
-      tracks.push({ name: 'Melodía', channel: 1, notes });
-    }
+    if (chordNotes.length) tracks.push({ name: 'Acordes', channel: 0, notes: chordNotes });
+    if (melNotes.length) tracks.push({ name: 'Melodía', channel: 1, notes: melNotes });
     if (!tracks.length) { this._toast('Nada que exportar todavía'); return; }
     downloadMidi({ bpm: this.state.bpm, tracks }, (this.state.name || 'sonus').replace(/[^\w\-]+/g, '_') + '.mid');
     this._toast('MIDI exportado');
@@ -570,7 +754,7 @@ class App {
   /* ----------------------------------------------------------------- misc */
   touch() {
     clearTimeout(this._saveTimer);
-    this._saveTimer = setTimeout(() => Store.saveProject(this.state), 600);
+    this._saveTimer = setTimeout(() => Store.saveProject(this.serialize()), 600);
   }
 
   _toast(msg) {
