@@ -152,15 +152,17 @@
       </div>
 
       <div class="card cloud-card">
-        <h2>☁ Nube</h2>
-        <p class="hint">Guarda tu composición en la nube y compártela por enlace. Cualquiera con el enlace
-          puede abrirla y verla; solo tú (desde este navegador) puedes sobrescribirla. Otras personas pueden
-          guardar su propia copia.</p>
+        <h2>☁ Espacio de banda</h2>
+        <p class="hint">Guarda la canción en la nube y comparte el enlace con tu banda. <b>Cualquiera con el
+          enlace puede ver y editar</b> la misma sesión (Intro, Verso, Coro, Puente…). Se guarda solo mientras
+          editas; usa <b>Traer cambios</b> para ver lo que hayan hecho los demás.</p>
         <div class="project-actions">
           <button id="cloudSaveBtn" class="btn accent">☁ Guardar en la nube</button>
-          <button id="cloudShareBtn" class="btn">🔗 Compartir enlace</button>
+          <button id="cloudReloadBtn" class="btn ghost">🔄 Traer cambios</button>
+          <button id="cloudShareBtn" class="btn">🔗 Copiar enlace</button>
           <button id="cloudOpenBtn" class="btn ghost">📂 Abrir de la nube</button>
         </div>
+        <input id="cloudLink" class="cloud-link" readonly placeholder="El enlace para compartir aparecerá aquí al guardar" />
         <div id="cloudInfo" class="cloud-info hint"></div>
         <div id="cloudList" class="cloud-list"></div>
       </div>

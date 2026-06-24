@@ -317,6 +317,10 @@ main { padding: 16px 20px; max-width: 1180px; margin: 0 auto; }
 .field { display: flex; flex-direction: column; gap: 6px; max-width: 360px; margin-bottom: 16px; font-size: 0.8rem; color: var(--muted); }
 .field input { font-size: 1rem; }
 .project-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.cloud-link {
+  width: 100%; max-width: 520px; margin-top: 12px; font-size: 0.82rem; color: var(--teal);
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 11px;
+}
 .cloud-info { margin: 12px 0 6px; }
 .cloud-info code { background: var(--panel-2); padding: 1px 6px; border-radius: 5px; }
 .cloud-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }

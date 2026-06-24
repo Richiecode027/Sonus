@@ -762,6 +762,7 @@ class App {
   touch() {
     clearTimeout(this._saveTimer);
     this._saveTimer = setTimeout(() => Store.saveProject(this.serialize()), 600);
+    this._cloudSyncSoon();
   }
 
   _toast(msg) {
@@ -788,46 +789,58 @@ class App {
     });
   }
 
-  /* ------------------------------------------------------------- nube */
-  _tokens() { try { return JSON.parse(localStorage.getItem('sonus.tokens') || '{}'); } catch { return {}; } }
-  _getToken(id) { return this._tokens()[id]; }
-  _saveToken(id, token) { const t = this._tokens(); t[id] = token; localStorage.setItem('sonus.tokens', JSON.stringify(t)); }
+  /* ------------------------------------------------------- nube (banda) */
   _setUrlId(id) { try { history.replaceState(null, '', location.pathname + '?id=' + id); } catch {} }
+  _shareUrl() { return this.state.cloudId ? location.origin + location.pathname + '?id=' + this.state.cloudId : ''; }
 
   _bindCloud() {
-    const save = document.getElementById('cloudSaveBtn');
-    const share = document.getElementById('cloudShareBtn');
-    const open = document.getElementById('cloudOpenBtn');
-    if (save) save.addEventListener('click', () => this.saveToCloud());
-    if (share) share.addEventListener('click', () => this.shareLink());
-    if (open) open.addEventListener('click', () => this.openGallery());
+    const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
+    on('cloudSaveBtn', () => this.saveToCloud());
+    on('cloudReloadBtn', () => this.reloadFromCloud());
+    on('cloudShareBtn', () => this.shareLink());
+    on('cloudOpenBtn', () => this.openGallery());
+    const link = document.getElementById('cloudLink');
+    if (link) link.addEventListener('focus', () => link.select());
   }
 
   async saveToCloud() {
-    this._toast('Guardando en la nube…');
+    this._setCloudStatus('Guardando…');
     try {
       const project = this.serialize();
-      const id = this.state.cloudId;
-      const token = id ? this._getToken(id) : null;
-      if (id && token) {
-        await Cloud.updateSession(id, token, project);
-        this._toast('Actualizado en la nube ☁');
+      if (this.state.cloudId) {
+        await Cloud.updateSession(this.state.cloudId, project);
       } else {
         const res = await Cloud.createSession(project);
         this.state.cloudId = res.id;
-        this._saveToken(res.id, res.editToken);
         this._setUrlId(res.id);
         this.touch();
-        this._toast('Publicado ☁ — enlace listo para compartir');
       }
-      this._renderCloudInfo();
-    } catch (e) { this._toast('Error nube: ' + e.message); }
+      this._renderCloudInfo('Guardado ✓');
+      this._toast('Guardado en la nube ☁');
+    } catch (e) { this._setCloudStatus('Error al guardar: ' + e.message); this._toast('Error nube: ' + e.message); }
   }
 
-  async openSession(id) {
-    this._toast('Abriendo sesión…');
+  /** Autosave silencioso cuando la sesión ya está en la nube. */
+  _cloudSyncSoon() {
+    if (!this.state.cloudId) return;
+    clearTimeout(this._cloudTimer);
+    this._setCloudStatus('Cambios sin guardar…');
+    this._cloudTimer = setTimeout(async () => {
+      try { await Cloud.updateSession(this.state.cloudId, this.serialize()); this._renderCloudInfo('Guardado ✓'); }
+      catch { this._setCloudStatus('Sin conexión · los cambios están en local'); }
+    }, 2500);
+  }
+
+  async reloadFromCloud() {
+    if (!this.state.cloudId) { this._toast('Esta sesión aún no está en la nube'); return; }
+    await this.openSession(this.state.cloudId, true);
+    this._toast('Traídos los últimos cambios 🔄');
+  }
+
+  async openSession(id, silent) {
+    if (!silent) this._toast('Abriendo sesión…');
     try {
-      const project = await Cloud.getSession(id);
+      const { project } = await Cloud.getSession(id);
       this.state = { ...Store.defaultProject(), ...project };
       this.state.cloudId = id;
       this.stopPlayback();
@@ -841,9 +854,8 @@ class App {
       this._syncControls();
       this.refreshAll();
       this._setUrlId(id);
-      this._renderCloudInfo();
+      this._renderCloudInfo('Sesión abierta ✓');
       Store.saveProject(this.serialize());
-      this._toast('Sesión abierta ☁');
     } catch (e) { this._toast('No se pudo abrir: ' + e.message); }
   }
 
@@ -853,7 +865,7 @@ class App {
     box.innerHTML = '<div class="hint">Cargando sesiones…</div>';
     try {
       const sessions = await Cloud.listSessions();
-      if (!sessions.length) { box.innerHTML = '<div class="hint">Aún no hay sesiones publicadas. ¡Publica la tuya!</div>'; return; }
+      if (!sessions.length) { box.innerHTML = '<div class="hint">Aún no hay sesiones publicadas.</div>'; return; }
       box.innerHTML = '';
       sessions.forEach((s) => {
         const el = document.createElement('button');
@@ -867,18 +879,22 @@ class App {
   }
 
   shareLink() {
-    if (!this.state.cloudId) { this._toast('Primero guarda en la nube ☁'); return; }
-    const url = location.origin + location.pathname + '?id=' + this.state.cloudId;
+    const url = this._shareUrl();
+    if (!url) { this._toast('Primero pulsa «Guardar en la nube» ☁'); return; }
     if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => this._toast('Enlace copiado 🔗'), () => prompt('Copia el enlace:', url));
     else prompt('Copia el enlace:', url);
   }
 
-  _renderCloudInfo() {
+  _setCloudStatus(text) { const el = document.getElementById('cloudInfo'); if (el) el.textContent = text; }
+
+  _renderCloudInfo(status) {
+    const link = document.getElementById('cloudLink');
+    if (link) link.value = this._shareUrl();
     const el = document.getElementById('cloudInfo');
     if (!el) return;
-    if (!this.state.cloudId) { el.textContent = 'Esta composición aún no está en la nube.'; return; }
-    const owner = !!this._getToken(this.state.cloudId);
-    el.innerHTML = `En la nube · id <code>${this._esc(this.state.cloudId)}</code> · ${owner ? 'puedes sobrescribirla' : 'copia de solo lectura (al guardar se crea una nueva)'}`;
+    if (!this.state.cloudId) { el.textContent = 'Aún no publicada. Pulsa «Guardar en la nube» para crear el espacio de banda.'; return; }
+    const t = status ? status + ' · ' : '';
+    el.innerHTML = `${this._esc(t)}Espacio de banda — cualquiera con el enlace puede ver y editar.`;
   }
 
   _esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
