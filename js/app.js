@@ -467,8 +467,83 @@ class App {
       tabs.forEach((t) => t.classList.toggle('active', t === tab));
       document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + tab.dataset.view));
       if (tab.dataset.view === 'score') this.notation.render();
+      if (tab.dataset.view === 'workshop') this.renderWorkshop();
     }));
   }
+
+  /* ------------------------------------------------------------- workshop */
+  _uid() { return 'w' + Math.random().toString(36).slice(2, 8); }
+
+  exportToWorkshop() {
+    const prog = this.state.progression;
+    if (!prog.length) { this._toast('No hay progresión que enviar'); return; }
+    const label = prompt('Etiqueta de esta progresión (Verso, Coro, Intro, Outro…):', 'Verso');
+    if (label == null) return;
+    const chords = prog.map((c) => ({ roman: c.roman, symbol: c.symbol, color: c.color, midis: c.midis || T.chordToMidi(c) }));
+    this.state.workshop.push({ id: this._uid(), label: (label.trim() || 'Sin etiqueta'), chords });
+    this.touch();
+    this._toast('Añadido a Workshop 📥');
+  }
+
+  removeWorkshopItem(i) {
+    const it = this.state.workshop[i];
+    if (it && !confirm(`¿Quitar «${it.label}» del Workshop?`)) return;
+    this.state.workshop.splice(i, 1);
+    this.renderWorkshop();
+    this.touch();
+  }
+
+  renameWorkshopItem(i) {
+    const it = this.state.workshop[i]; if (!it) return;
+    const label = prompt('Nueva etiqueta:', it.label);
+    if (label != null && label.trim()) { it.label = label.trim(); this.renderWorkshop(); this.touch(); }
+  }
+
+  playWorkshopItem(i) {
+    const it = this.state.workshop[i]; if (!it) return;
+    this.stopPlayback();
+    this.engine.init().then(() => {
+      const dur = 0.72;
+      let t = this.engine.now() + 0.05;
+      it.chords.forEach((c) => { if (c.midis) this.engine.playChord(c.midis, dur * 0.95, t, 0.6); t += dur; });
+    });
+  }
+
+  renderWorkshop() {
+    const box = document.getElementById('workshop');
+    if (!box) return;
+    const ws = this.state.workshop;
+    box.innerHTML = '';
+    if (!ws.length) {
+      box.innerHTML = '<div class="prog-empty">Aún no hay progresiones. Crea una en «Acordes & Progresión» y pulsa «📥 A Workshop».</div>';
+      return;
+    }
+    ws.forEach((it, i) => {
+      const item = document.createElement('div');
+      item.className = 'ws-item';
+      const cells = it.chords.map((c) =>
+        `<div class="ws-cell" style="--c:${c.color || '#888'}"><span class="roman">${this._esc(c.roman)}</span><span class="sym">${this._esc(c.symbol)}</span></div>`).join('');
+      item.innerHTML = `
+        <div class="ws-head">
+          <h3 class="ws-label">${this._esc(it.label)}</h3>
+          <div class="ws-actions">
+            <button data-a="play" title="Escuchar">▶</button>
+            <button data-a="ren" title="Renombrar etiqueta">✎</button>
+            <button data-a="del" title="Quitar">×</button>
+          </div>
+        </div>
+        <div class="ws-strip">${cells}</div>`;
+      item.querySelector('.ws-actions').addEventListener('click', (e) => {
+        const b = e.target.closest('button'); if (!b) return;
+        if (b.dataset.a === 'play') this.playWorkshopItem(i);
+        else if (b.dataset.a === 'ren') this.renameWorkshopItem(i);
+        else if (b.dataset.a === 'del') this.removeWorkshopItem(i);
+      });
+      box.appendChild(item);
+    });
+  }
+
+  _esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
   _bindPlayback() {
     const styleSel = document.getElementById('styleSel');

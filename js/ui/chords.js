@@ -47,6 +47,7 @@ export class ChordsPanel {
             <button id="reharmBtn" class="btn accent">✨ Rearmonizar</button>
             <button id="progPlay" class="btn">▶ Reproducir</button>
             <button id="progStop" class="btn ghost">■ Parar</button>
+            <button id="toWorkshopBtn" class="btn">📥 A Workshop</button>
             <button id="progClear" class="btn ghost">Limpiar</button>
           </div>
         </div>
@@ -77,6 +78,7 @@ export class ChordsPanel {
     this.container.querySelector('#progPlay').addEventListener('click', () => this.app.playProgression());
     this.container.querySelector('#progStop').addEventListener('click', () => this.app.stopPlayback());
     this.container.querySelector('#progClear').addEventListener('click', () => this.app.clearProgression());
+    this.container.querySelector('#toWorkshopBtn').addEventListener('click', () => this.app.exportToWorkshop());
     this.container.querySelector('#detectBtn').addEventListener('click', () => this.renderKeyDetection());
     this.container.querySelector('#reharmBtn').addEventListener('click', () => this.renderReharm());
   }

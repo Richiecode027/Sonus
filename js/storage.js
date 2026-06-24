@@ -16,6 +16,7 @@ export const defaultProject = () => ({
   volume: 0.8,
   progression: [],          // [{ degree, seventh, source, symbol, roman, midis, name }]
   sequence: {},             // { "midi:col": true } notas del piano roll
+  workshop: [],             // [{ id, label, chords:[{roman,symbol,color,midis}] }]
   seqSteps: 16,
   octaveRange: [4, 5],
   voiceLeading: true,       // conducción de voces suave

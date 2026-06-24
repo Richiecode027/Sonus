@@ -353,6 +353,26 @@ main { padding: 16px 20px; max-width: 1180px; margin: 0 auto; }
   .notation { background: #fff; overflow: visible; }
 }
 
+/* ------------------------------------------------------------- workshop */
+.ws-list { display: flex; flex-direction: column; gap: 18px; }
+.ws-item { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.ws-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.ws-label { margin: 0; font-size: 1.05rem; color: var(--text); }
+.ws-actions { display: flex; gap: 4px; }
+.ws-actions button {
+  width: 28px; height: 28px; border-radius: 7px; background: transparent; border: 1px solid var(--border);
+  color: var(--muted); cursor: pointer; font-size: 0.8rem; line-height: 1;
+}
+.ws-actions button:hover { color: var(--text); border-color: var(--border-strong); }
+.ws-strip { display: flex; gap: 10px; flex-wrap: wrap; }
+.ws-cell {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  min-width: 78px; padding: 14px 12px; background: var(--panel-2); border: 1px solid var(--border);
+  border-bottom: 3px solid var(--c, #888); border-radius: var(--radius-sm);
+}
+.ws-cell .roman { font-size: 1.15rem; font-weight: 700; color: var(--c, var(--text)); }
+.ws-cell .sym { font-size: 0.82rem; color: var(--text); }
+
 /* ------------------------------------------------------------- responsive */
 @media (max-width: 860px) {
   .explore-grid { grid-template-columns: 1fr; }
