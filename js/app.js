@@ -13,7 +13,7 @@ import { Notation } from './ui/notation.js';
 import { MidiInput } from './ui/midiInput.js';
 import * as FB from './ui/fretboard.js';
 import { downloadMidi } from './midi.js';
-import { buildSongLayout, chordEvents } from './song.js';
+import { buildSongLayout, chordEvents, timeSig, TIME_SIGS } from './song.js';
 import { generateMelody } from './generator.js';
 import { reharmonize } from './reharmonize.js';
 import { renderSongWav } from './recorder.js';
@@ -65,6 +65,25 @@ class App {
   _scoreVisible() {
     const v = document.getElementById('view-score');
     return v && v.classList.contains('active');
+  }
+
+  /* ------------------------------------------------------------- compás */
+  get sig() { return timeSig(this.state.timeSig); }
+  get barSteps() { return this.sig.barSteps; }
+
+  setTimeSig(key) {
+    if (!TIME_SIGS[key]) return;
+    this.stopPlayback();
+    this.state.timeSig = key;
+    // Ajusta la longitud del patrón a un número entero de compases.
+    const bars = Math.max(1, Math.round(this.state.seqSteps / this.barSteps)) || 1;
+    this.state.seqSteps = bars * this.barSteps;
+    this.transport.totalSteps = this.state.seqSteps;
+    this.sequencer.render();
+    this.chords.renderProgression();
+    if (this._scoreVisible()) this.notation.render();
+    this._syncControls();
+    this.touch();
   }
 
   /* --------------------------------------------------------- derived data */
@@ -237,8 +256,8 @@ class App {
 
   _metroAt(step, time) {
     if (!this.state.metronome) return;
-    const spb = this.transport.stepsPerBeat;
-    if (step % spb === 0) this.engine.click(time, step % (spb * 4) === 0);
+    const { click } = this.sig;
+    if (step % click === 0) this.engine.click(time, step % this.barSteps === 0);
   }
 
   playProgression() {
@@ -248,7 +267,7 @@ class App {
     const voiced = this.getVoicedProgression();
     const style = this.state.chordStyle;
     this.engine.init().then(() => {
-      const barSteps = this.transport.stepsPerBeat * 4;
+      const barSteps = this.barSteps;
       this.transport.totalSteps = prog.length * barSteps;
       this.transport.loop = true;
       const barDur = barSteps * this.transport.stepDur;
@@ -273,7 +292,7 @@ class App {
     const voiced = this.getVoicedProgression();
     const style = this.state.chordStyle;
     this.engine.init().then(() => {
-      const { barSteps, totalSteps } = buildSongLayout(voiced.length, seqSteps, this.transport.stepsPerBeat);
+      const { barSteps, totalSteps } = buildSongLayout(voiced.length, seqSteps, this.barSteps);
       this.transport.totalSteps = totalSteps;
       this.transport.loop = true;
       const barDur = barSteps * this.transport.stepDur;
@@ -302,11 +321,11 @@ class App {
     const seqSteps = this.state.seqSteps;
     const [lo, hi] = this.state.octaveRange;
     const prog = this.state.progression;
-    const { songBars } = buildSongLayout(prog.length, seqSteps, this.transport.stepsPerBeat);
     const chords = prog.length ? prog : [];
     const seq = generateMelody({
       chords, steps: seqSteps, scalePcs: this.scalePcSet,
-      low: 12 * (lo + 1), high: 12 * (hi + 1) + 11, stepsPerBeat: this.transport.stepsPerBeat,
+      low: 12 * (lo + 1), high: 12 * (hi + 1) + 11,
+      stepsPerBeat: this.transport.stepsPerBeat, barSteps: this.barSteps,
     });
     this.state.sequence = seq;
     this.sequencer.render();
@@ -330,7 +349,7 @@ class App {
     try {
       await renderSongWav({
         voiced, melodyByCol: melody, seqSteps: this.state.seqSteps, stepsPerBeat: this.transport.stepsPerBeat,
-        bpm: this.state.bpm, style: this.state.chordStyle, loops: 2,
+        barSteps: this.barSteps, bpm: this.state.bpm, style: this.state.chordStyle, loops: 2,
         instrumentKey: this.state.instrument, reverbWet: this.state.reverb, volume: this.state.volume,
         filename: (this.state.name || 'sonus').replace(/[^\w\-]+/g, '_'),
       });
@@ -341,11 +360,11 @@ class App {
   exportMusicXML() {
     const prog = this.state.progression;
     const melody = this._melodyByCol();
-    const { songBars } = buildSongLayout(prog.length, this.state.seqSteps, this.transport.stepsPerBeat);
+    const { songBars } = buildSongLayout(prog.length, this.state.seqSteps, this.barSteps);
     const xml = buildMusicXML({
       title: this.state.name, bpm: this.state.bpm, rootName: this.state.root,
       scaleNotes: this.scaleNotes, progression: prog, melodyByCol: melody,
-      seqSteps: this.state.seqSteps, songBars,
+      seqSteps: this.state.seqSteps, songBars, barSteps: this.barSteps, sig: this.sig,
     });
     triggerDownload(new Blob([xml], { type: 'application/vnd.recordare.musicxml+xml' }),
       (this.state.name || 'sonus').replace(/[^\w\-]+/g, '_') + '.musicxml');
@@ -441,8 +460,13 @@ class App {
     if (metro) metro.classList.toggle('on', this.state.metronome);
     const vl = document.getElementById('voiceLeadBtn');
     if (vl) vl.classList.toggle('on', this.state.voiceLeading);
+    const sigSel = document.getElementById('sigSel');
+    if (sigSel) sigSel.value = this.state.timeSig;
     const stepSel = document.getElementById('stepSel');
-    if (stepSel) stepSel.querySelectorAll('button').forEach((b) => b.classList.toggle('active', +b.dataset.v === this.state.seqSteps));
+    if (stepSel) {
+      const bars = Math.max(1, Math.round(this.state.seqSteps / this.barSteps));
+      stepSel.querySelectorAll('button').forEach((b) => b.classList.toggle('active', +b.dataset.bars === bars));
+    }
   }
 
   _bindTopbar() {
@@ -455,6 +479,8 @@ class App {
       this.state.bpm = +e.target.value; this.transport.bpm = +e.target.value;
       document.getElementById('bpmVal').textContent = e.target.value; this.touch();
     });
+    const sigSel = document.getElementById('sigSel');
+    if (sigSel) sigSel.addEventListener('change', (e) => this.setTimeSig(e.target.value));
     document.getElementById('instSel').addEventListener('change', (e) => { this.state.instrument = e.target.value; this.engine.setInstrument(e.target.value); this.touch(); });
     document.getElementById('vol').addEventListener('input', (e) => { this.state.volume = +e.target.value; this.engine.setVolume(+e.target.value); this.touch(); });
     document.getElementById('rev').addEventListener('input', (e) => { this.state.reverb = +e.target.value; this.engine.setReverb(+e.target.value); this.touch(); });
@@ -593,7 +619,7 @@ class App {
     this._pushUndo();
     this.state.workshop.push({
       id: this._uid(), label: (label.trim() || 'Sin etiqueta'), chords,
-      root: this.state.root, scale: this.state.scale, bpm: this.state.bpm,
+      root: this.state.root, scale: this.state.scale, bpm: this.state.bpm, timeSig: this.state.timeSig,
     });
     this.touch();
     this._toast('Añadido a Workshop 📥');
@@ -672,7 +698,7 @@ class App {
         <div class="ws-head">
           <div class="ws-title">
             <h3 class="ws-label">${this._esc(it.label)}</h3>
-            <span class="ws-meta">${this._esc(sc.root)} ${this._esc(sc.def.name)} · ${it.bpm || this.state.bpm} BPM</span>
+            <span class="ws-meta">${this._esc(sc.root)} ${this._esc(sc.def.name)} · ${it.bpm || this.state.bpm} BPM · ${this._esc(timeSig(it.timeSig || this.state.timeSig).label)}</span>
           </div>
           <div class="ws-actions">
             <button data-a="up" title="Subir" aria-label="Subir">▲</button>
@@ -834,8 +860,9 @@ class App {
     const prog = this.state.progression;
     const tracks = [];
     if (prog.length) {
+      const beatsPerBar = this.barSteps / this.transport.stepsPerBeat;   // en negras
       const notes = [];
-      prog.forEach((c, i) => c.midis.forEach((m) => notes.push({ midi: m, start: i * 4, duration: 3.9, velocity: 0.7 })));
+      prog.forEach((c, i) => c.midis.forEach((m) => notes.push({ midi: m, start: i * beatsPerBar, duration: beatsPerBar * 0.97, velocity: 0.7 })));
       tracks.push({ name: 'Acordes', channel: 0, notes });
     }
     if (Object.keys(this.state.sequence).length) {

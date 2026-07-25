@@ -69,7 +69,7 @@ function harmonyXML(chord) {
  * @param {number} o.songBars
  * @returns {string} XML
  */
-export function buildMusicXML({ title = 'Sonus', bpm = 100, rootName = 'C', scaleNotes = [], progression = [], melodyByCol = {}, seqSteps = 16, songBars = 1 }) {
+export function buildMusicXML({ title = 'Sonus', bpm = 100, rootName = 'C', scaleNotes = [], progression = [], melodyByCol = {}, seqSteps = 16, songBars = 1, barSteps = 16, sig = { xmlBeats: 4, xmlUnit: 4 } }) {
   const spell = {};
   scaleNotes.forEach((n) => { spell[n.pc] = { step: n.letter, alter: n.accOff }; });
   const fifths = MAJOR_FIFTHS[rootName] ?? 0;
@@ -79,8 +79,8 @@ export function buildMusicXML({ title = 'Sonus', bpm = 100, rootName = 'C', scal
   for (let m = 0; m < bars; m++) {
     // Onsets de melodía dentro del compás (patrón repetido).
     const onsets = [];
-    for (let p = 0; p < 16; p++) {
-      const col = m * 16 + p;
+    for (let p = 0; p < barSteps; p++) {
+      const col = m * barSteps + p;
       const notes = melodyByCol[col % seqSteps];
       if (notes && notes.length) onsets.push({ p, midi: Math.max(...notes) });
     }
@@ -90,17 +90,17 @@ export function buildMusicXML({ title = 'Sonus', bpm = 100, rootName = 'C', scal
     body += harmonyXML(chord);
 
     if (!onsets.length) {
-      body += emitRest(16);
+      body += emitRest(barSteps);
     } else {
       if (onsets[0].p > 0) body += emitRest(onsets[0].p);
       onsets.forEach((on, i) => {
-        const end = i + 1 < onsets.length ? onsets[i + 1].p : 16;
+        const end = i + 1 < onsets.length ? onsets[i + 1].p : barSteps;
         body += emitNote(midiToPitch(on.midi, spell), end - on.p);
       });
     }
 
     const attributes = m === 0
-      ? `<attributes><divisions>4</divisions><key><fifths>${fifths}</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>`
+      ? `<attributes><divisions>4</divisions><key><fifths>${fifths}</fifths></key><time><beats>${sig.xmlBeats}</beats><beat-type>${sig.xmlUnit}</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>`
       : '';
     const tempo = m === 0
       ? `<direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${bpm}</per-minute></metronome></direction-type><sound tempo="${bpm}"/></direction>`

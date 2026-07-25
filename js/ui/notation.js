@@ -37,7 +37,9 @@ export class Notation {
     const prog = app.state.progression;
     const melody = app._melodyByCol();
     const seqSteps = app.state.seqSteps;
-    const songBars = Math.max(prog.length, Math.ceil(seqSteps / 16), 1);
+    const barSteps = app.barSteps;
+    const sig = app.sig;
+    const songBars = Math.max(prog.length, Math.ceil(seqSteps / barSteps), 1);
 
     const width = Math.max(560, this.container.clientWidth || 900);
     const bpr = width < 600 ? 2 : width < 920 ? 3 : 4;
@@ -62,8 +64,8 @@ export class Notation {
           svg += `<line x1="${LEFT}" y1="${y}" x2="${width - 6}" y2="${y}" class="staff-line"/>`;
         }
         svg += `<text x="14" y="${yBottom + 4}" class="clef">𝄞</text>`;
-        svg += `<text x="${LEFT + 4}" y="${y0 + GAP * 1.7}" class="timesig">4</text>`;
-        svg += `<text x="${LEFT + 4}" y="${y0 + GAP * 3.7}" class="timesig">4</text>`;
+        svg += `<text x="${LEFT + 4}" y="${y0 + GAP * 1.7}" class="timesig">${sig.xmlBeats}</text>`;
+        svg += `<text x="${LEFT + 4}" y="${y0 + GAP * 3.7}" class="timesig">${sig.xmlUnit}</text>`;
       }
 
       // Barra de compás (izquierda).
@@ -77,14 +79,14 @@ export class Notation {
       const padL = isRowStart ? 40 : 12;
       const usable = barW - padL - 10;
       const onsets = [];
-      for (let p = 0; p < 16; p++) {
-        const notes = melody[(m * 16 + p) % seqSteps];
+      for (let p = 0; p < barSteps; p++) {
+        const notes = melody[(m * barSteps + p) % seqSteps];
         if (notes && notes.length) onsets.push({ p, midi: Math.max(...notes) });
       }
       onsets.forEach((on, i) => {
-        const end = i + 1 < onsets.length ? onsets[i + 1].p : 16;
+        const end = i + 1 < onsets.length ? onsets[i + 1].p : barSteps;
         const dur = end - on.p;
-        const nx = x0 + padL + (on.p / 16) * usable;
+        const nx = x0 + padL + (on.p / barSteps) * usable;
         svg += this._note(nx, on.midi, dur, spell, y0, yBottom);
       });
     }

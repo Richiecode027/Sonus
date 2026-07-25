@@ -6,8 +6,20 @@
  * progresión. Estilos de acorde: bloque, arpegio, rasgueo.
  * ==========================================================================*/
 
-export function buildSongLayout(progLen, seqSteps, stepsPerBeat = 4) {
-  const barSteps = stepsPerBeat * 4;
+/* ----------------------------------------------------------------------------
+ * Compases. La rejilla es siempre de semicorcheas (stepsPerBeat = 4), así que
+ * cada métrica solo cambia cuántos pasos dura un compás y dónde va el pulso.
+ *   4/4 → 4 negras = 16 pasos · 3/4 → 3 negras = 12 · 6/8 → 6 corcheas = 12
+ * --------------------------------------------------------------------------*/
+export const TIME_SIGS = {
+  '4/4': { label: '4/4', barSteps: 16, click: 4, beats: 4, xmlBeats: 4, xmlUnit: 4, chordBeats: 4 },
+  '3/4': { label: '3/4', barSteps: 12, click: 4, beats: 3, xmlBeats: 3, xmlUnit: 4, chordBeats: 3 },
+  '6/8': { label: '6/8', barSteps: 12, click: 6, beats: 2, xmlBeats: 6, xmlUnit: 8, chordBeats: 3 },
+};
+
+export function timeSig(key) { return TIME_SIGS[key] || TIME_SIGS['4/4']; }
+
+export function buildSongLayout(progLen, seqSteps, barSteps = 16) {
   const songBars = Math.max(progLen || 1, Math.ceil(seqSteps / barSteps));
   return { barSteps, songBars, totalSteps: songBars * barSteps };
 }
@@ -30,9 +42,9 @@ export function chordEvents(midis, start, barDur, stepDur, style = 'block', vel 
 }
 
 /** Lista completa de eventos del tema para render offline. */
-export function buildSongEvents({ voiced = [], melodyByCol = {}, seqSteps = 16, stepsPerBeat = 4, bpm = 100, style = 'block', loops = 2 }) {
+export function buildSongEvents({ voiced = [], melodyByCol = {}, seqSteps = 16, stepsPerBeat = 4, barSteps: bs = 16, bpm = 100, style = 'block', loops = 2 }) {
   const stepDur = 60 / bpm / stepsPerBeat;
-  const { barSteps, totalSteps } = buildSongLayout(voiced.length, seqSteps, stepsPerBeat);
+  const { barSteps, totalSteps } = buildSongLayout(voiced.length, seqSteps, bs);
   const barDur = barSteps * stepDur;
   const events = [];
   const N = loops * totalSteps;

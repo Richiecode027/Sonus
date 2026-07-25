@@ -23,8 +23,8 @@ export class Sequencer {
         <h2>Melodía · Piano roll</h2>
         <div class="seq-controls">
           <div class="seg-toggle" id="stepSel">
-            <button data-v="16" class="active">16</button>
-            <button data-v="32">32</button>
+            <button data-bars="1" class="active">1 compás</button>
+            <button data-bars="2">2 compases</button>
           </div>
           <button class="btn ghost" id="octDown">Octava −</button>
           <button class="btn ghost" id="octUp">Octava +</button>
@@ -39,7 +39,7 @@ export class Sequencer {
     this.container.querySelector('#stepSel').addEventListener('click', (e) => {
       const btn = e.target.closest('button'); if (!btn) return;
       this.container.querySelectorAll('#stepSel button').forEach((b) => b.classList.toggle('active', b === btn));
-      this.app.setSteps(parseInt(btn.dataset.v, 10));
+      this.app.setSteps(parseInt(btn.dataset.bars, 10) * this.app.barSteps);
     });
     this.container.querySelector('#octDown').addEventListener('click', () => this.app.shiftOctave(-1));
     this.container.querySelector('#octUp').addEventListener('click', () => this.app.shiftOctave(1));
@@ -74,7 +74,8 @@ export class Sequencer {
       lane.style.gridTemplateColumns = `repeat(${steps}, 1fr)`;
       for (let c = 0; c < steps; c++) {
         const cell = document.createElement('div');
-        cell.className = 'roll-cell' + (c % spb === 0 ? ' beat' : '') + (c % (spb * 4) === 0 ? ' bar' : '');
+        const barSteps = this.app.barSteps;
+        cell.className = 'roll-cell' + (c % spb === 0 ? ' beat' : '') + (c % barSteps === 0 ? ' bar' : '');
         cell.dataset.midi = m; cell.dataset.col = c;
         const key = `${m}:${c}`;
         if (seq[key]) cell.classList.add('on');

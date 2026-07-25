@@ -20,6 +20,7 @@ export const defaultProject = () => ({
   seqSteps: 16,
   octaveRange: [4, 5],
   voiceLeading: true,       // conducción de voces suave
+  timeSig: '4/4',           // '4/4' | '3/4' | '6/8'
   chordStyle: 'block',      // 'block' | 'arp' | 'strum'
   metronome: false,
   swing: 0,                 // 0..0.6

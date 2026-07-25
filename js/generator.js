@@ -61,13 +61,11 @@ const PATTERNS = [
  * @param {number} [o.seed]
  * @returns {object} sequence { "midi:col": true }
  */
-export function generateMelody({ chords = [], steps, scalePcs, low, high, stepsPerBeat = 4, seed }) {
+export function generateMelody({ chords = [], steps, scalePcs, low, high, stepsPerBeat = 4, barSteps = 16, seed }) {
   const rng = mulberry32((seed ?? Date.now()) >>> 0);
   const pool = [];
   for (let m = low; m <= high; m++) if (scalePcs.has(((m % 12) + 12) % 12)) pool.push(m);
   if (!pool.length) return {};
-
-  const barSteps = stepsPerBeat * 4;
   const totalBars = Math.max(1, Math.ceil(steps / barSteps));
   const seq = {};
 
@@ -78,7 +76,10 @@ export function generateMelody({ chords = [], steps, scalePcs, low, high, stepsP
   for (let bar = 0; bar < totalBars; bar++) {
     const chord = chords.length ? chords[bar % chords.length] : null;
     const pcs = chord ? new Set(chord.notes.map((n) => n.pc)) : null;
-    const rhythm = (bar > 0 && rng() < 0.4) ? PATTERNS[Math.floor(rng() * PATTERNS.length)] : baseRhythm;
+    const pick = (bar > 0 && rng() < 0.4) ? PATTERNS[Math.floor(rng() * PATTERNS.length)] : baseRhythm;
+    // Recorta el patrón al tamaño del compás (3/4 y 6/8 tienen 12 pasos).
+    const rhythm = pick.filter((p) => p < barSteps);
+    if (!rhythm.length) rhythm.push(0);
 
     rhythm.forEach((pos, idx) => {
       const col = bar * barSteps + pos;
