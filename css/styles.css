@@ -289,6 +289,22 @@ main { padding: 16px 20px; max-width: 1180px; margin: 0 auto; }
 .field { display: flex; flex-direction: column; gap: 6px; max-width: 360px; margin-bottom: 16px; font-size: 0.8rem; color: var(--muted); }
 .field input { font-size: 1rem; }
 .project-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.song-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.song-row { display: flex; gap: 8px; align-items: stretch; }
+.song-row.current .song-open { border-color: var(--gold); }
+.song-open {
+  flex: 1; display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 11px 14px; cursor: pointer; font-family: var(--font); color: var(--text); text-align: left;
+}
+.song-open:hover { border-color: var(--teal); }
+.song-open span { font-size: 0.72rem; color: var(--muted); }
+.song-del {
+  width: 38px; background: transparent; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--muted); cursor: pointer; font-size: 1rem;
+}
+.song-del:hover { color: #ff8a8a; border-color: #ff8a8a; }
+
 .help-list { list-style: none; counter-reset: step; display: grid; gap: 12px; }
 .help-list li { position: relative; padding-left: 40px; line-height: 1.5; color: var(--text); }
 .help-list li::before { counter-increment: step; content: counter(step); position: absolute; left: 0; top: 0; width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(145deg, var(--gold), var(--teal)); color: #10131a; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; }
@@ -372,6 +388,46 @@ main { padding: 16px 20px; max-width: 1180px; margin: 0 auto; }
 }
 .ws-cell .roman { font-size: 1.15rem; font-weight: 700; color: var(--c, var(--text)); }
 .ws-cell .sym { font-size: 0.82rem; color: var(--text); }
+.ws-cell { cursor: pointer; font-family: var(--font); transition: all 0.12s ease; }
+.ws-cell:hover { background: rgba(255,255,255,0.10); }
+.ws-cell.sel { box-shadow: 0 0 0 2px var(--gold); transform: translateY(-2px); }
+.ws-title { display: flex; flex-direction: column; gap: 2px; }
+.ws-meta { font-size: 0.72rem; color: var(--muted); }
+
+/* --------------------------------------------- diagramas de instrumento */
+.ws-inst { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+.ws-inst-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; }
+.seg-inst { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.seg-inst .mini-toggle { font-size: 0.7rem; }
+.ws-scope { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fb-wrap { overflow-x: auto; background: #0b0d11; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px; }
+.fb-svg, .kb-svg { display: block; min-width: 560px; height: auto; }
+.kb-svg { min-width: 420px; }
+
+.fb-marker { fill: rgba(255,255,255,0.035); }
+.fb-fretnum { fill: var(--muted); font-size: 11px; text-anchor: middle; font-family: var(--font); }
+.fb-strlabel { fill: var(--muted); font-size: 11px; font-weight: 600; text-anchor: middle; font-family: var(--font); }
+.fb-string { stroke: rgba(255,255,255,0.22); stroke-width: 1.4; }
+.fb-fret { stroke: rgba(255,255,255,0.13); stroke-width: 1.4; }
+.fb-nut { stroke: rgba(255,255,255,0.6); stroke-width: 4; }
+
+.fb-dot, .kb-dot { fill: var(--teal); opacity: 0.9; }
+.fb-dot.root, .kb-dot.root { fill: var(--gold); }
+.fb-dot.chord, .kb-dot.chord { fill: var(--orange); }
+.fb-dot.dim, .kb-dot.dim { opacity: 0.16; }
+.fb-dotlabel, .kb-dotlabel { fill: #10131a; font-size: 10px; font-weight: 700; text-anchor: middle; font-family: var(--font); }
+.kb-dotlabel.small { font-size: 9px; }
+.fb-dotlabel.dim, .kb-dotlabel.dim { fill: rgba(255,255,255,0.35); }
+
+.kb-white { fill: #eceff4; stroke: #aeb4bf; stroke-width: 1; }
+.kb-black { fill: #191c22; stroke: #000; stroke-width: 1; }
+.kb-oct { fill: #6b7280; font-size: 10px; font-weight: 600; text-anchor: middle; font-family: var(--font); }
+
+.fb-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; font-size: 0.72rem; color: var(--muted); }
+.fb-legend i.lg { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+.fb-legend i.root { background: var(--gold); }
+.fb-legend i.scale { background: var(--teal); }
+.fb-legend i.chord { background: var(--orange); }
 
 /* ------------------------------------------------------------- responsive */
 @media (max-width: 860px) {

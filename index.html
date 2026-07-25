@@ -31,6 +31,7 @@
         </div>
       </div>
       <div class="topbar-actions">
+        <button id="undoBtn" class="btn ghost" title="Deshacer (Ctrl+Z)" aria-label="Deshacer" disabled>↩</button>
         <button id="playBtn" class="play-btn" title="Reproducir / pausar (barra espaciadora)">▶</button>
         <button id="menuToggle" class="menu-toggle" aria-expanded="false" aria-controls="controls" title="Mostrar / ocultar controles">
           <span class="mt-label">Controles</span><span class="chev">▾</span>
@@ -148,6 +149,15 @@
           <button id="newBtn" class="btn ghost danger">Nuevo</button>
         </div>
         <p class="hint">El proyecto se guarda solo en este navegador. Exporta a <b>MIDI</b> para abrirlo en cualquier DAW (Logic, Ableton, FL Studio, MuseScore…) o a <b>.json</b> para respaldarlo.</p>
+      </div>
+
+      <div class="card">
+        <div class="panel-head">
+          <h2>Mis canciones</h2>
+          <button id="songSaveBtn" class="btn accent">＋ Guardar como canción</button>
+        </div>
+        <p class="hint">Guarda varias canciones en este navegador y cambia entre ellas sin perder nada.</p>
+        <div id="songList" class="song-list"></div>
       </div>
 
       <div class="card help-card">

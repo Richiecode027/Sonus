@@ -3,7 +3,7 @@
  * Precarga el app-shell para uso 100% offline; cache-first con actualización.
  * ==========================================================================*/
 
-const CACHE = 'sonus-v10';
+const CACHE = 'sonus-v11';
 const ASSETS = [
   './',
   './index.html',
@@ -25,6 +25,7 @@ const ASSETS = [
   './js/ui/sequencer.js',
   './js/ui/notation.js',
   './js/ui/midiInput.js',
+  './js/ui/fretboard.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',
@@ -57,17 +58,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Recursos: cache-first con relleno de caché.
+  // Recursos: stale-while-revalidate — responde al instante desde caché y
+  // actualiza en segundo plano, así la próxima carga ya trae la versión nueva.
   event.respondWith(
     caches.match(req).then((cached) => {
-      if (cached) return cached;
-      return fetch(req).then((res) => {
+      const network = fetch(req).then((res) => {
         if (res && res.status === 200 && res.type === 'basic') {
           const copy = res.clone();
           caches.open(CACHE).then((cache) => cache.put(req, copy));
         }
         return res;
       }).catch(() => cached);
+      return cached || network;
     })
   );
 });

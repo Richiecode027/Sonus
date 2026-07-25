@@ -11,6 +11,7 @@ import { ChordsPanel } from './ui/chords.js';
 import { Sequencer } from './ui/sequencer.js';
 import { Notation } from './ui/notation.js';
 import { MidiInput } from './ui/midiInput.js';
+import * as FB from './ui/fretboard.js';
 import { downloadMidi } from './midi.js';
 import { buildSongLayout, chordEvents } from './song.js';
 import { generateMelody } from './generator.js';
@@ -142,17 +143,20 @@ class App {
     this.touch();
   }
   removeFromProgression(i) {
+    this._pushUndo();
     this.state.progression.splice(i, 1);
     this.chords.renderProgression();
     this.touch();
   }
   clearProgression() {
     this.stopPlayback();
+    this._pushUndo();
     this.state.progression = [];
     this.chords.renderProgression();
     this.touch();
   }
   loadProgressionPreset(preset) {
+    this._pushUndo();
     const dia = this.getDiatonic(preset.seventh ? 4 : 3);
     this.state.progression = preset.degrees.map((d) => this.attachMidis(dia[d % dia.length]));
     this.chords.renderProgression();
@@ -180,6 +184,7 @@ class App {
 
   applyReharmonization(chords) {
     this.stopPlayback();
+    this._pushUndo();
     this.state.progression = chords.map((c) => this.attachMidis(c));
     this.chords.renderProgression();
     if (this._scoreVisible()) this.notation.render();
@@ -203,7 +208,7 @@ class App {
     this.sequencer.render();
     this.touch();
   }
-  clearSequence() { this.state.sequence = {}; this.sequencer.render(); this.touch(); }
+  clearSequence() { this._pushUndo(); this.state.sequence = {}; this.sequencer.render(); this.touch(); }
 
   _applySeqRange() {
     const [lo, hi] = this.state.octaveRange;
@@ -293,6 +298,7 @@ class App {
 
   /* ----------------------------------------------------- generar / grabar */
   generateMelodyForSong() {
+    this._pushUndo();
     const seqSteps = this.state.seqSteps;
     const [lo, hi] = this.state.octaveRange;
     const prog = this.state.progression;
@@ -453,10 +459,17 @@ class App {
     document.getElementById('vol').addEventListener('input', (e) => { this.state.volume = +e.target.value; this.engine.setVolume(+e.target.value); this.touch(); });
     document.getElementById('rev').addEventListener('input', (e) => { this.state.reverb = +e.target.value; this.engine.setReverb(+e.target.value); this.touch(); });
 
+    const undoBtn = document.getElementById('undoBtn');
+    if (undoBtn) undoBtn.addEventListener('click', () => this.undo());
+
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'Space' && !/input|textarea|select/i.test(e.target.tagName)) {
+      const typing = /input|textarea|select/i.test(e.target.tagName);
+      if (e.code === 'Space' && !typing) {
         e.preventDefault();
         if (this.transport.playing) this.stopPlayback(); else this.playSong();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing) {
+        e.preventDefault(); this.undo();
       }
     });
   }
@@ -471,6 +484,99 @@ class App {
     }));
   }
 
+  /* ---------------------------------------------------- mis canciones */
+  saveSongToLibrary() {
+    const name = prompt('Nombre de la canción:', this.state.name || 'Sin título');
+    if (name == null) return;
+    this.state.name = name.trim() || 'Sin título';
+    const nameInput = document.getElementById('projName');
+    if (nameInput) nameInput.value = this.state.name;
+    // Si el nombre cambia respecto a la canción abierta, se guarda como una
+    // canción nueva; si es el mismo, se actualiza la existente.
+    const current = this._songId ? Store.listSongs().find((s) => s.id === this._songId) : null;
+    const sameName = current && current.name === this.state.name;
+    this._songId = Store.saveSong(this.state, sameName ? this._songId : null);
+    this.renderSongList();
+    this.touch();
+    this._toast('Canción guardada 🎵');
+  }
+
+  loadSongFromLibrary(id) {
+    const data = Store.getSong(id);
+    if (!data) { this._toast('No se encontró la canción'); return; }
+    this.stopPlayback();
+    this.state = { ...Store.defaultProject(), ...data };
+    this._songId = id;
+    this._undo = [];
+    this.transport.bpm = this.state.bpm;
+    this.transport.swing = this.state.swing || 0;
+    this.engine.setInstrument(this.state.instrument);
+    this.engine.setVolume(this.state.volume);
+    this.engine.setReverb(this.state.reverb);
+    this.recompute();
+    this._syncControls();
+    this.refreshAll();
+    this.renderWorkshop();
+    this.renderSongList();
+    this._syncUndoBtn();
+    this.touch();
+    this._toast('Canción abierta 🎵');
+  }
+
+  renderSongList() {
+    const box = document.getElementById('songList');
+    if (!box) return;
+    const songs = Store.listSongs();
+    box.innerHTML = '';
+    if (!songs.length) { box.innerHTML = '<div class="hint">Aún no has guardado ninguna canción.</div>'; return; }
+    songs.forEach((s) => {
+      const row = document.createElement('div');
+      row.className = 'song-row' + (s.id === this._songId ? ' current' : '');
+      row.innerHTML = `
+        <button class="song-open"><b>${this._esc(s.name)}</b><span>${new Date(s.updated).toLocaleString()}</span></button>
+        <button class="song-del" title="Eliminar" aria-label="Eliminar canción">×</button>`;
+      row.querySelector('.song-open').addEventListener('click', () => this.loadSongFromLibrary(s.id));
+      row.querySelector('.song-del').addEventListener('click', () => {
+        if (!confirm(`¿Eliminar «${s.name}»?`)) return;
+        Store.deleteSong(s.id);
+        if (this._songId === s.id) this._songId = null;
+        this.renderSongList();
+      });
+      box.appendChild(row);
+    });
+  }
+
+  /* --------------------------------------------------------------- undo */
+  _pushUndo() {
+    this._undo = this._undo || [];
+    this._undo.push(JSON.stringify({
+      progression: this.state.progression, sequence: this.state.sequence, workshop: this.state.workshop,
+    }));
+    if (this._undo.length > 30) this._undo.shift();
+    this._syncUndoBtn();
+  }
+
+  undo() {
+    if (!this._undo || !this._undo.length) { this._toast('Nada que deshacer'); return; }
+    const snap = JSON.parse(this._undo.pop());
+    this.stopPlayback();
+    this.state.progression = snap.progression;
+    this.state.sequence = snap.sequence;
+    this.state.workshop = snap.workshop;
+    this.chords.renderProgression();
+    this.sequencer.render();
+    this.renderWorkshop();
+    if (this._scoreVisible()) this.notation.render();
+    this._syncUndoBtn();
+    this.touch();
+    this._toast('Deshecho ↩');
+  }
+
+  _syncUndoBtn() {
+    const b = document.getElementById('undoBtn');
+    if (b) b.disabled = !(this._undo && this._undo.length);
+  }
+
   /* ------------------------------------------------------------- workshop */
   _uid() { return 'w' + Math.random().toString(36).slice(2, 8); }
 
@@ -479,8 +585,16 @@ class App {
     if (!prog.length) { this._toast('No hay progresión que enviar'); return; }
     const label = prompt('Etiqueta de esta progresión (Verso, Coro, Intro, Outro…):', 'Verso');
     if (label == null) return;
-    const chords = prog.map((c) => ({ roman: c.roman, symbol: c.symbol, color: c.color, midis: c.midis || T.chordToMidi(c) }));
-    this.state.workshop.push({ id: this._uid(), label: (label.trim() || 'Sin etiqueta'), chords });
+    const chords = prog.map((c) => ({
+      roman: c.roman, symbol: c.symbol, color: c.color,
+      midis: c.midis || T.chordToMidi(c),
+      pcs: c.notes.map((n) => n.pc), rootPc: c.root.pc,
+    }));
+    this._pushUndo();
+    this.state.workshop.push({
+      id: this._uid(), label: (label.trim() || 'Sin etiqueta'), chords,
+      root: this.state.root, scale: this.state.scale, bpm: this.state.bpm,
+    });
     this.touch();
     this._toast('Añadido a Workshop 📥');
   }
@@ -488,6 +602,7 @@ class App {
   removeWorkshopItem(i) {
     const it = this.state.workshop[i];
     if (it && !confirm(`¿Quitar «${it.label}» del Workshop?`)) return;
+    this._pushUndo();
     this.state.workshop.splice(i, 1);
     this.renderWorkshop();
     this.touch();
@@ -499,14 +614,36 @@ class App {
     if (label != null && label.trim()) { it.label = label.trim(); this.renderWorkshop(); this.touch(); }
   }
 
+  moveWorkshopItem(i, dir) {
+    const ws = this.state.workshop, j = i + dir;
+    if (j < 0 || j >= ws.length) return;
+    [ws[i], ws[j]] = [ws[j], ws[i]];
+    this.renderWorkshop(); this.touch();
+  }
+
   playWorkshopItem(i) {
     const it = this.state.workshop[i]; if (!it) return;
     this.stopPlayback();
     this.engine.init().then(() => {
-      const dur = 0.72;
+      const dur = 60 / (it.bpm || this.state.bpm) * 2;   // dos pulsos por acorde
       let t = this.engine.now() + 0.05;
       it.chords.forEach((c) => { if (c.midis) this.engine.playChord(c.midis, dur * 0.95, t, 0.6); t += dur; });
     });
+  }
+
+  /** Vista (no persistida) del panel de instrumento por tarjeta. */
+  _wsView(id) {
+    this._wsViews = this._wsViews || {};
+    if (!this._wsViews[id]) this._wsViews[id] = { inst: 'guitar', chord: -1 };
+    return this._wsViews[id];
+  }
+
+  _wsScale(it) {
+    const root = it.root || this.state.root;
+    const scaleKey = T.SCALES[it.scale] ? it.scale : this.state.scale;
+    const notes = T.buildScale(root, scaleKey);
+    const spell = {}; notes.forEach((n) => { spell[n.pc] = n.name; });
+    return { root, scaleKey, notes, spell, pcs: new Set(notes.map((n) => n.pc)), rootPc: T.parseNote(root).pc, def: T.SCALES[scaleKey] };
   }
 
   renderWorkshop() {
@@ -519,27 +656,96 @@ class App {
       return;
     }
     ws.forEach((it, i) => {
+      const sc = this._wsScale(it);
+      const view = this._wsView(it.id);
       const item = document.createElement('div');
       item.className = 'ws-item';
-      const cells = it.chords.map((c) =>
-        `<div class="ws-cell" style="--c:${c.color || '#888'}"><span class="roman">${this._esc(c.roman)}</span><span class="sym">${this._esc(c.symbol)}</span></div>`).join('');
+
+      const cells = it.chords.map((c, ci) =>
+        `<button class="ws-cell${view.chord === ci ? ' sel' : ''}" style="--c:${c.color || '#888'}" data-ci="${ci}"
+           aria-label="Acorde ${this._esc(c.symbol)}"><span class="roman">${this._esc(c.roman)}</span><span class="sym">${this._esc(c.symbol)}</span></button>`).join('');
+
+      const instBtns = Object.entries(FB.INSTRUMENT_DEFS).map(([k, d]) =>
+        `<button class="mini-toggle${view.inst === k ? ' on' : ''}" data-inst="${k}">${d.name}</button>`).join('');
+
       item.innerHTML = `
         <div class="ws-head">
-          <h3 class="ws-label">${this._esc(it.label)}</h3>
+          <div class="ws-title">
+            <h3 class="ws-label">${this._esc(it.label)}</h3>
+            <span class="ws-meta">${this._esc(sc.root)} ${this._esc(sc.def.name)} · ${it.bpm || this.state.bpm} BPM</span>
+          </div>
           <div class="ws-actions">
-            <button data-a="play" title="Escuchar">▶</button>
-            <button data-a="ren" title="Renombrar etiqueta">✎</button>
-            <button data-a="del" title="Quitar">×</button>
+            <button data-a="up" title="Subir" aria-label="Subir">▲</button>
+            <button data-a="down" title="Bajar" aria-label="Bajar">▼</button>
+            <button data-a="play" title="Escuchar" aria-label="Escuchar">▶</button>
+            <button data-a="ren" title="Renombrar etiqueta" aria-label="Renombrar etiqueta">✎</button>
+            <button data-a="del" title="Quitar" aria-label="Quitar">×</button>
           </div>
         </div>
-        <div class="ws-strip">${cells}</div>`;
+        <div class="ws-strip">${cells}</div>
+        <div class="ws-inst">
+          <div class="ws-inst-bar">
+            <div class="seg-inst">${instBtns}</div>
+            <div class="ws-scope">
+              <button class="mini-toggle${view.chord < 0 ? ' on' : ''}" data-ci="-1">Escala completa</button>
+              <span class="hint">o toca un acorde arriba para ver sus notas</span>
+            </div>
+          </div>
+          <div class="fb-wrap"></div>
+          <div class="fb-legend">
+            <span><i class="lg root"></i> tónica</span>
+            <span><i class="lg scale"></i> nota de la escala</span>
+            <span><i class="lg chord"></i> nota del acorde (R·3·5·7)</span>
+          </div>
+        </div>`;
+
+      const draw = () => {
+        const wrap = item.querySelector('.fb-wrap');
+        const c = view.chord >= 0 ? it.chords[view.chord] : null;
+        wrap.innerHTML = FB.renderInstrument({
+          instrument: view.inst, scalePcs: sc.pcs, rootPc: sc.rootPc, spell: sc.spell,
+          chordPcs: c ? new Set(c.pcs || c.midis.map((m) => ((m % 12) + 12) % 12)) : null,
+          chordRootPc: c ? (c.rootPc != null ? c.rootPc : ((c.midis[0] % 12) + 12) % 12) : null,
+        });
+      };
+
       item.querySelector('.ws-actions').addEventListener('click', (e) => {
         const b = e.target.closest('button'); if (!b) return;
-        if (b.dataset.a === 'play') this.playWorkshopItem(i);
-        else if (b.dataset.a === 'ren') this.renameWorkshopItem(i);
-        else if (b.dataset.a === 'del') this.removeWorkshopItem(i);
+        const a = b.dataset.a;
+        if (a === 'play') this.playWorkshopItem(i);
+        else if (a === 'ren') this.renameWorkshopItem(i);
+        else if (a === 'del') this.removeWorkshopItem(i);
+        else if (a === 'up') this.moveWorkshopItem(i, -1);
+        else if (a === 'down') this.moveWorkshopItem(i, 1);
       });
+
+      item.querySelector('.ws-strip').addEventListener('click', (e) => {
+        const b = e.target.closest('.ws-cell'); if (!b) return;
+        const ci = +b.dataset.ci;
+        view.chord = view.chord === ci ? -1 : ci;
+        item.querySelectorAll('.ws-cell').forEach((el) => el.classList.toggle('sel', +el.dataset.ci === view.chord));
+        item.querySelector('.ws-scope .mini-toggle').classList.toggle('on', view.chord < 0);
+        const ch = it.chords[ci];
+        if (ch && ch.midis) this.engine.init().then(() => this.engine.playChord(ch.midis, 1.1, null, 0.65));
+        draw();
+      });
+
+      item.querySelector('.seg-inst').addEventListener('click', (e) => {
+        const b = e.target.closest('button'); if (!b) return;
+        view.inst = b.dataset.inst;
+        item.querySelectorAll('.seg-inst button').forEach((x) => x.classList.toggle('on', x === b));
+        draw();
+      });
+
+      item.querySelector('.ws-scope .mini-toggle').addEventListener('click', () => {
+        view.chord = -1;
+        item.querySelectorAll('.ws-cell').forEach((el) => el.classList.remove('sel'));
+        item.querySelector('.ws-scope .mini-toggle').classList.add('on');
+        draw();
+      });
+
       box.appendChild(item);
+      draw();
     });
   }
 
@@ -605,6 +811,10 @@ class App {
       this.transport.bpm = this.state.bpm;
       this.recompute(); this._syncControls(); this.refreshAll(); this.touch();
     });
+    const songSave = document.getElementById('songSaveBtn');
+    if (songSave) songSave.addEventListener('click', () => this.saveSongToLibrary());
+    this.renderSongList();
+
     const importFile = document.getElementById('importFile');
     document.getElementById('importBtn').addEventListener('click', () => importFile.click());
     importFile.addEventListener('change', async (e) => {
@@ -657,9 +867,21 @@ class App {
   }
 
   _registerSW() {
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
-    }
+    if (!('serviceWorker' in navigator)) return;
+    // Al activarse una versión nueva del service worker, recarga una sola vez
+    // para que la app quede siempre actualizada sin recargas manuales.
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloading) return;
+      reloading = true;
+      location.reload();
+    });
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').then((reg) => {
+        reg.update();
+        setInterval(() => reg.update(), 60 * 60 * 1000);
+      }).catch(() => {});
+    });
   }
 
   _bindMenu() {
