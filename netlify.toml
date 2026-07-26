@@ -2,6 +2,16 @@
 [build]
   publish = "."
 
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# API del Workshop compartido (progresiones de la banda).
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
 # Cabeceras correctas para el manifiesto y el service worker.
 [[headers]]
   for = "/manifest.webmanifest"

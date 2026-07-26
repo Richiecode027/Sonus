@@ -370,6 +370,7 @@ main { padding: 16px 20px; max-width: 1180px; margin: 0 auto; }
 }
 
 /* ------------------------------------------------------------- workshop */
+.ws-syncinfo { margin: -4px 0 12px; }
 .ws-list { display: flex; flex-direction: column; gap: 18px; }
 .ws-item { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
 .ws-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }

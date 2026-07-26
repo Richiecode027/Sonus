@@ -12,6 +12,7 @@ import { Sequencer } from './ui/sequencer.js';
 import { Notation } from './ui/notation.js';
 import { MidiInput } from './ui/midiInput.js';
 import * as FB from './ui/fretboard.js';
+import * as Cloud from './cloud.js';
 import { downloadMidi } from './midi.js';
 import { buildSongLayout, chordEvents, timeSig, TIME_SIGS } from './song.js';
 import { generateMelody } from './generator.js';
@@ -54,6 +55,7 @@ class App {
     this._bindCompose();
     this._bindMidi();
     this._bindMenu();
+    this._bindWorkshop();
     this._syncControls();
     this.recompute();
     this.refreshAll();
@@ -506,8 +508,13 @@ class App {
       tabs.forEach((t) => t.classList.toggle('active', t === tab));
       document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + tab.dataset.view));
       if (tab.dataset.view === 'score') this.notation.render();
-      if (tab.dataset.view === 'workshop') this.renderWorkshop();
+      if (tab.dataset.view === 'workshop') { this.loadWorkshop(); this.startWorkshopPolling(); }
+      else this.stopWorkshopPolling();
     }));
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.stopWorkshopPolling();
+      else if (document.querySelector('.tab[data-view="workshop"]').classList.contains('active')) this.startWorkshopPolling();
+    });
   }
 
   /* ---------------------------------------------------- mis canciones */
@@ -576,7 +583,7 @@ class App {
   _pushUndo() {
     this._undo = this._undo || [];
     this._undo.push(JSON.stringify({
-      progression: this.state.progression, sequence: this.state.sequence, workshop: this.state.workshop,
+      progression: this.state.progression, sequence: this.state.sequence,
     }));
     if (this._undo.length > 30) this._undo.shift();
     this._syncUndoBtn();
@@ -588,10 +595,8 @@ class App {
     this.stopPlayback();
     this.state.progression = snap.progression;
     this.state.sequence = snap.sequence;
-    this.state.workshop = snap.workshop;
     this.chords.renderProgression();
     this.sequencer.render();
-    this.renderWorkshop();
     if (this._scoreVisible()) this.notation.render();
     this._syncUndoBtn();
     this.touch();
@@ -603,10 +608,10 @@ class App {
     if (b) b.disabled = !(this._undo && this._undo.length);
   }
 
-  /* ------------------------------------------------------------- workshop */
-  _uid() { return 'w' + Math.random().toString(36).slice(2, 8); }
-
-  exportToWorkshop() {
+  /* ---------------------------------------------------- workshop (banda) */
+  // El Workshop ya NO se guarda en el proyecto local: es una lista única
+  // compartida en la nube que ve y edita cualquiera con acceso a la página.
+  async exportToWorkshop() {
     const prog = this.state.progression;
     if (!prog.length) { this._toast('No hay progresión que enviar'); return; }
     const label = prompt('Etiqueta de esta progresión (Verso, Coro, Intro, Outro…):', 'Verso');
@@ -616,39 +621,56 @@ class App {
       midis: c.midis || T.chordToMidi(c),
       pcs: c.notes.map((n) => n.pc), rootPc: c.root.pc,
     }));
-    this._pushUndo();
-    this.state.workshop.push({
-      id: this._uid(), label: (label.trim() || 'Sin etiqueta'), chords,
+    const item = {
+      label: (label.trim() || 'Sin etiqueta'), chords,
       root: this.state.root, scale: this.state.scale, bpm: this.state.bpm, timeSig: this.state.timeSig,
-    });
-    this.touch();
-    this._toast('Añadido a Workshop 📥');
+    };
+    this._toast('Enviando a Workshop…');
+    try {
+      const res = await Cloud.addWorkshopItem(item);
+      this.workshopItems = res.items; this._wsUpdated = res.updated;
+      this.renderWorkshop();
+      this._toast('Añadido a Workshop 📥');
+    } catch (e) { this._toast('Sin conexión con Workshop: ' + e.message); }
   }
 
-  removeWorkshopItem(i) {
-    const it = this.state.workshop[i];
-    if (it && !confirm(`¿Quitar «${it.label}» del Workshop?`)) return;
-    this._pushUndo();
-    this.state.workshop.splice(i, 1);
-    this.renderWorkshop();
-    this.touch();
+  async removeWorkshopItem(id) {
+    const it = (this.workshopItems || []).find((x) => x.id === id);
+    if (it && !confirm(`¿Quitar «${it.label}» del Workshop? Se quitará para toda la banda.`)) return;
+    try {
+      const res = await Cloud.deleteWorkshopItem(id);
+      this.workshopItems = res.items; this._wsUpdated = res.updated;
+      this.renderWorkshop();
+    } catch (e) { this._toast('Error al quitar: ' + e.message); }
   }
 
-  renameWorkshopItem(i) {
-    const it = this.state.workshop[i]; if (!it) return;
+  async renameWorkshopItem(id) {
+    const it = (this.workshopItems || []).find((x) => x.id === id); if (!it) return;
     const label = prompt('Nueva etiqueta:', it.label);
-    if (label != null && label.trim()) { it.label = label.trim(); this.renderWorkshop(); this.touch(); }
+    if (label == null || !label.trim()) return;
+    try {
+      const res = await Cloud.updateWorkshopItem(id, { label: label.trim() });
+      this.workshopItems = res.items; this._wsUpdated = res.updated;
+      this.renderWorkshop();
+    } catch (e) { this._toast('Error al renombrar: ' + e.message); }
   }
 
-  moveWorkshopItem(i, dir) {
-    const ws = this.state.workshop, j = i + dir;
-    if (j < 0 || j >= ws.length) return;
-    [ws[i], ws[j]] = [ws[j], ws[i]];
-    this.renderWorkshop(); this.touch();
+  async moveWorkshopItem(id, dir) {
+    const ws = this.workshopItems || [];
+    const i = ws.findIndex((x) => x.id === id), j = i + dir;
+    if (i < 0 || j < 0 || j >= ws.length) return;
+    const next = ws.slice();
+    [next[i], next[j]] = [next[j], next[i]];
+    this.workshopItems = next; this.renderWorkshop();   // respuesta visual inmediata
+    try {
+      const res = await Cloud.reorderWorkshop(next.map((x) => x.id));
+      this.workshopItems = res.items; this._wsUpdated = res.updated;
+      this.renderWorkshop();
+    } catch (e) { this._toast('No se pudo guardar el orden: ' + e.message); }
   }
 
-  playWorkshopItem(i) {
-    const it = this.state.workshop[i]; if (!it) return;
+  playWorkshopItem(id) {
+    const it = (this.workshopItems || []).find((x) => x.id === id); if (!it) return;
     this.stopPlayback();
     this.engine.init().then(() => {
       const dur = 60 / (it.bpm || this.state.bpm) * 2;   // dos pulsos por acorde
@@ -656,6 +678,27 @@ class App {
       it.chords.forEach((c) => { if (c.midis) this.engine.playChord(c.midis, dur * 0.95, t, 0.6); t += dur; });
     });
   }
+
+  /** Carga (o refresca) la lista compartida. silent = no mostrar aviso de carga. */
+  async loadWorkshop(silent) {
+    if (!silent) { this._wsLoading = true; this.renderWorkshop(); }
+    try {
+      const res = await Cloud.fetchWorkshop();
+      if (res.updated === this._wsUpdated && silent) return;   // nada nuevo
+      this.workshopItems = res.items; this._wsUpdated = res.updated;
+      this._wsLoading = false; this._wsError = null;
+      this.renderWorkshop();
+    } catch (e) {
+      this._wsLoading = false; this._wsError = e.message;
+      if (!silent) this.renderWorkshop();
+    }
+  }
+
+  startWorkshopPolling() {
+    this.stopWorkshopPolling();
+    this._wsPoll = setInterval(() => this.loadWorkshop(true), 8000);
+  }
+  stopWorkshopPolling() { if (this._wsPoll) { clearInterval(this._wsPoll); this._wsPoll = null; } }
 
   /** Vista (no persistida) del panel de instrumento por tarjeta. */
   _wsView(id) {
@@ -672,11 +715,19 @@ class App {
     return { root, scaleKey, notes, spell, pcs: new Set(notes.map((n) => n.pc)), rootPc: T.parseNote(root).pc, def: T.SCALES[scaleKey] };
   }
 
-  renderWorkshop() {
+renderWorkshop() {
     const box = document.getElementById('workshop');
     if (!box) return;
-    const ws = this.state.workshop;
+    const info = document.getElementById('wsInfo');
+    if (info) {
+      info.textContent = this._wsError ? '⚠ Sin conexión con Workshop — ' + this._wsError
+        : this._wsUpdated ? 'Actualizado ' + new Date(this._wsUpdated).toLocaleTimeString()
+        : '';
+    }
+    const ws = this.workshopItems || [];
     box.innerHTML = '';
+    if (this._wsLoading) { box.innerHTML = '<div class="prog-empty">Cargando Workshop…</div>'; return; }
+    if (this._wsError && !ws.length) { box.innerHTML = '<div class="prog-empty">No se pudo cargar el Workshop. Comprueba tu conexión y pulsa 🔄.</div>'; return; }
     if (!ws.length) {
       box.innerHTML = '<div class="prog-empty">Aún no hay progresiones. Crea una en «Acordes & Progresión» y pulsa «📥 A Workshop».</div>';
       return;
@@ -738,11 +789,11 @@ class App {
       item.querySelector('.ws-actions').addEventListener('click', (e) => {
         const b = e.target.closest('button'); if (!b) return;
         const a = b.dataset.a;
-        if (a === 'play') this.playWorkshopItem(i);
-        else if (a === 'ren') this.renameWorkshopItem(i);
-        else if (a === 'del') this.removeWorkshopItem(i);
-        else if (a === 'up') this.moveWorkshopItem(i, -1);
-        else if (a === 'down') this.moveWorkshopItem(i, 1);
+        if (a === 'play') this.playWorkshopItem(it.id);
+        else if (a === 'ren') this.renameWorkshopItem(it.id);
+        else if (a === 'del') this.removeWorkshopItem(it.id);
+        else if (a === 'up') this.moveWorkshopItem(it.id, -1);
+        else if (a === 'down') this.moveWorkshopItem(it.id, 1);
       });
 
       item.querySelector('.ws-strip').addEventListener('click', (e) => {
@@ -792,6 +843,11 @@ class App {
       this.state.voiceLeading = !this.state.voiceLeading;
       vl.classList.toggle('on', this.state.voiceLeading); this.touch();
     });
+  }
+
+  _bindWorkshop() {
+    const wsRefresh = document.getElementById('wsRefreshBtn');
+    if (wsRefresh) wsRefresh.addEventListener('click', () => this.loadWorkshop());
   }
 
   _bindCompose() {
