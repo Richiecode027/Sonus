@@ -3,6 +3,6 @@
   "private": true,
   "description": "Sonus — PWA de composición musical",
   "dependencies": {
-    "@netlify/blobs": "^10.7.0"
+    "@netlify/blobs": "10.7.9"
   }
 }
